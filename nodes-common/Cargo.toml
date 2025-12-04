@@ -1,0 +1,18 @@
+[package]
+name = "taceo-nodes-common"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+description = "Collection of common functions used by nodes in our MPC networks"
+readme = "./README.md"
+repository.workspace = true
+license.workspace = true
+publish = true
+
+[dependencies]
+aws-config = { workspace = true, features = ["behavior-version-latest"] }
+aws-sdk-secretsmanager = { workspace = true }
+git-version = { workspace = true }
+tokio = { workspace = true, features = ["macros", "signal"] }
+tokio-util = { workspace = true }
+tracing.workspace = true
