@@ -17,7 +17,7 @@ git-version = "0.3"
 humantime = "2.2"
 metrics = "0.24.2"
 metrics-exporter-dogstatsd = "0.9"
-metrics-exporter-prometheus = "0.17"
+metrics-exporter-prometheus = "0.18"
 metrics-exporter-statsd = "0.9"
 secrecy = "0.10"
 telemetry-batteries = { git = "https://github.com/worldcoin/telemetry-batteries.git", rev = "dc325a1df78867892066575866b6a805380f8237" }
