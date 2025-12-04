@@ -1,0 +1,39 @@
+[workspace]
+resolver = "3"
+members = ["nodes-common", "nodes-observability"]
+
+[workspace.package]
+edition = "2024"
+rust-version = "1.90"
+homepage = "https://taceo.io/"
+repository = "https://github.com/TaceoLabs/nodes-helpers"
+license = "MIT OR Apache-2.0"
+
+[workspace.dependencies]
+aws-config = "1"
+aws-sdk-secretsmanager = "1"
+eyre = "0.6"
+git-version = "0.3"
+humantime = "2.2"
+metrics = "0.24.2"
+metrics-exporter-dogstatsd = "0.9"
+metrics-exporter-prometheus = "0.17"
+metrics-exporter-statsd = "0.9"
+secrecy = "0.10"
+telemetry-batteries = { git = "https://github.com/worldcoin/telemetry-batteries.git", rev = "dc325a1df78867892066575866b6a805380f8237" }
+tokio = { version = "1" }
+tokio-util = "0.7"
+tracing = "0.1"
+tracing-subscriber = "0.3"
+
+# This profile can be used for CI in pull requests.
+[profile.ci-dev]
+inherits = "dev"
+opt-level = 1
+debug = true
+incremental = false
+
+[profile.profiling]
+inherits = "bench"
+debug = true
+lto = "thin"
