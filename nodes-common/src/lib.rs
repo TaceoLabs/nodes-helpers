@@ -3,14 +3,20 @@ use aws_sdk_secretsmanager::config::Credentials;
 use tokio::signal;
 use tokio_util::sync::CancellationToken;
 
-/// Returns cargo package name, cargo package version, and the git hash of the repository that was used to build the binary.
-pub fn version_info() -> String {
-    format!(
-        "{} {} ({})",
-        env!("CARGO_PKG_NAME"),
-        env!("CARGO_PKG_VERSION"),
-        option_env!("GIT_HASH").unwrap_or(git_version::git_version!(fallback = "UNKNOWN"))
-    )
+pub use git_version;
+
+/// Macro to generate version information including the crate name, version, and git hash.
+#[macro_export]
+macro_rules! version_info {
+    () => {
+        format!(
+            "{} {} ({})",
+            env!("CARGO_PKG_NAME"),
+            env!("CARGO_PKG_VERSION"),
+            option_env!("GIT_HASH")
+                .unwrap_or($crate::git_version::git_version!(fallback = "UNKNOWN"))
+        )
+    };
 }
 
 /// Spawns a shutdown task and creates an associated [`CancellationToken`](https://docs.rs/tokio-util/latest/tokio_util/sync/struct.CancellationToken.html). This task will complete when either the provided `shutdown_signal` futures completes or if some other tasks cancels the shutdown token. The associated shutdown token will be cancelled either way.
