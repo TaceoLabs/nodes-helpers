@@ -1,3 +1,8 @@
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+};
+
 use aws_config::Region;
 use aws_sdk_secretsmanager::config::Credentials;
 use tokio::signal;
@@ -24,18 +29,24 @@ macro_rules! version_info {
 /// Waiting for the shutdown token is the preferred way to wait for termination.
 pub fn spawn_shutdown_task(
     shutdown_signal: impl Future<Output = ()> + Send + 'static,
-) -> CancellationToken {
+) -> (CancellationToken, Arc<AtomicBool>) {
     let cancellation_token = CancellationToken::new();
+    let is_graceful = Arc::new(AtomicBool::new(false));
     let task_token = cancellation_token.clone();
-    tokio::spawn(async move {
-        tokio::select! {
-            _ = shutdown_signal => {
-                task_token.cancel();
+    tokio::spawn({
+        let is_graceful = Arc::clone(&is_graceful);
+        async move {
+            tokio::select! {
+                _ = shutdown_signal => {
+                    tracing::info!("received graceful shutdown");
+                    is_graceful.store(true, Ordering::Relaxed);
+                    task_token.cancel();
+                }
+                _ = task_token.cancelled() => {}
             }
-            _ = task_token.cancelled() => {}
         }
     });
-    cancellation_token
+    (cancellation_token, is_graceful)
 }
 
 /// The default shutdown signal for the oprf-service. Triggered when pressing CTRL+C on most systems.
