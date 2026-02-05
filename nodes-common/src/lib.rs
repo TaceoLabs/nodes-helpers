@@ -1,5 +1,5 @@
 use std::sync::{
-    Arc,
+    Arc, Mutex,
     atomic::{AtomicBool, Ordering},
 };
 
@@ -22,6 +22,42 @@ macro_rules! version_info {
                 .unwrap_or($crate::git_version::git_version!(fallback = "UNKNOWN"))
         )
     };
+}
+
+/// A struct that keeps track of the health of all async services started by the service.
+///
+/// Relevant for the `/health` route. Implementations should call [`StartedServices::new_service`] for their services and set the bool to `true` if the service started successfully.
+#[derive(Debug, Clone, Default)]
+pub struct StartedServices {
+    external_service: Arc<Mutex<Vec<Arc<AtomicBool>>>>,
+}
+
+impl StartedServices {
+    /// Initializes all services as not started.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Adds a new external service to the bookkeeping struct.
+    ///
+    /// Implementations should call this method for every async task that they start. The returned `AtomicBool` should then be set to `true` if the service is ready.
+    pub fn new_service(&self) -> Arc<AtomicBool> {
+        let service = Arc::new(AtomicBool::default());
+        self.external_service
+            .lock()
+            .expect("Not poisoned")
+            .push(Arc::clone(&service));
+        service
+    }
+
+    /// Returns `true` if all services did start.
+    pub fn all_started(&self) -> bool {
+        self.external_service
+            .lock()
+            .expect("Not poisoned")
+            .iter()
+            .all(|service| service.load(Ordering::Relaxed))
+    }
 }
 
 /// Spawns a shutdown task and creates an associated [`CancellationToken`](https://docs.rs/tokio-util/latest/tokio_util/sync/struct.CancellationToken.html). This task will complete when either the provided `shutdown_signal` futures completes or if some other tasks cancels the shutdown token. The associated shutdown token will be cancelled either way.
