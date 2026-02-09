@@ -20,7 +20,7 @@ metrics-exporter-dogstatsd = "0.9"
 metrics-exporter-prometheus = "0.17"
 metrics-exporter-statsd = "0.9"
 secrecy = "0.10"
-telemetry-batteries = "0.1.2"
+telemetry-batteries = "0.2.1"
 tokio = { version = "1" }
 tokio-util = "0.7"
 tracing = "0.1"
