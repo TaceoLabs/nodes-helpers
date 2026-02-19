@@ -10,6 +10,8 @@ use tokio_util::sync::CancellationToken;
 
 pub use git_version;
 
+pub mod api;
+
 /// Macro to generate version information including the crate name, version, and git hash.
 #[macro_export]
 macro_rules! version_info {
