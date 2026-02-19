@@ -19,7 +19,10 @@ use crate::StartedServices;
 /// Create a router containing the health and info endpoints.
 ///
 /// All endpoints have `Cache-Control: no-cache` set.
-pub fn routes(started_services: StartedServices, version_str: String) -> Router {
+pub fn routes<S>(started_services: StartedServices, version_str: String) -> Router<S>
+where
+    S: Clone + Send + Sync + 'static,
+{
     Router::new()
         .route("/health", get(move || health(started_services)))
         .route("/version", get(move || version(version_str)))
