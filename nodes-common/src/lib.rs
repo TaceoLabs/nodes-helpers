@@ -10,6 +10,9 @@ use tokio_util::sync::CancellationToken;
 
 pub use git_version;
 
+#[cfg(feature = "api")]
+pub mod api;
+
 /// Macro to generate version information including the crate name, version, and git hash.
 #[macro_export]
 macro_rules! version_info {
@@ -50,7 +53,7 @@ impl StartedServices {
         service
     }
 
-    /// Returns `true` if all services did start.
+    /// Returns `true` if all services did start. If there are no services started, this will also return `true`.
     pub fn all_started(&self) -> bool {
         self.external_service
             .lock()

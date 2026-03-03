@@ -12,6 +12,7 @@ license = "MIT OR Apache-2.0"
 [workspace.dependencies]
 aws-config = "1"
 aws-sdk-secretsmanager = "1"
+axum = "0.8"
 eyre = "0.6"
 git-version = "0.3"
 humantime = "2.2"
@@ -23,6 +24,7 @@ secrecy = "0.10"
 telemetry-batteries = "0.1.2"
 tokio = { version = "1" }
 tokio-util = "0.7"
+tower-http = "0.6"
 tracing = "0.1"
 tracing-subscriber = "0.3"
 

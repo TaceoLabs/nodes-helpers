@@ -12,7 +12,13 @@ publish = true
 [dependencies]
 aws-config = { workspace = true, features = ["behavior-version-latest"] }
 aws-sdk-secretsmanager = { workspace = true }
+axum = { workspace = true, optional = true }
 git-version = { workspace = true }
 tokio = { workspace = true, features = ["macros", "signal"] }
 tokio-util = { workspace = true }
+tower-http = { workspace = true, features = ["set-header"], optional = true }
 tracing.workspace = true
+
+[features]
+default = ["api"]
+api = ["dep:axum", "dep:tower-http"]
