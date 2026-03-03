@@ -16,15 +16,38 @@ use tower_http::set_header::SetResponseHeaderLayer;
 
 use crate::StartedServices;
 
-/// Create a router containing the health and info endpoints.
+/// Creates a router exposing `/health` and `/version`.
 ///
-/// All endpoints have `Cache-Control: no-cache` set.
-pub fn routes<S>(started_services: StartedServices, version_str: String) -> Router<S>
+/// The `/health` endpoint reports healthy only if all registered [`StartedServices`] have started.
+///
+/// All responses have `Cache-Control: no-cache` set.
+pub fn routes_with_services<S>(started_services: StartedServices, version_str: String) -> Router<S>
 where
     S: Clone + Send + Sync + 'static,
 {
     Router::new()
         .route("/health", get(move || health(started_services)))
+        .route("/version", get(move || version(version_str)))
+        .layer(SetResponseHeaderLayer::overriding(
+            header::CACHE_CONTROL,
+            HeaderValue::from_static("no-cache"),
+        ))
+}
+
+/// Creates a router exposing `/health` and `/version`.
+///
+/// The `/health` endpoint always returns `200 OK` which basically just signals that the axum server did start successfully.
+///
+/// All responses have `Cache-Control: no-cache` set.
+pub fn routes<S>(version_str: String) -> Router<S>
+where
+    S: Clone + Send + Sync + 'static,
+{
+    Router::new()
+        .route(
+            "/health",
+            get(|| async move { (StatusCode::OK, "healthy") }),
+        )
         .route("/version", get(move || version(version_str)))
         .layer(SetResponseHeaderLayer::overriding(
             header::CACHE_CONTROL,

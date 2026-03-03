@@ -53,7 +53,7 @@ impl StartedServices {
         service
     }
 
-    /// Returns `true` if all services did start.
+    /// Returns `true` if all services did start. If there are no services started, this will also return `true`.
     pub fn all_started(&self) -> bool {
         self.external_service
             .lock()
