@@ -72,6 +72,7 @@ pub fn spawn_shutdown_task(
     tokio::spawn({
         let is_graceful = Arc::clone(&is_graceful);
         async move {
+            let _drop_guard = task_token.drop_guard_ref();
             tokio::select! {
                 _ = shutdown_signal => {
                     tracing::info!("received graceful shutdown");
