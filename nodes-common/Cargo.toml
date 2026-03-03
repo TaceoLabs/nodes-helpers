@@ -16,7 +16,7 @@ axum = { workspace = true, optional = true }
 git-version = { workspace = true }
 tokio = { workspace = true, features = ["macros", "signal"] }
 tokio-util = { workspace = true }
-tower-http = { workspace = true, features = ["set-header", "trace"], optional = true }
+tower-http = { workspace = true, features = ["set-header"], optional = true }
 tracing.workspace = true
 
 [features]
