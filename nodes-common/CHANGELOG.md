@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+## [0.3.0](https://github.com/TaceoLabs/nodes-helpers/compare/taceo-nodes-common-v0.2.2...taceo-nodes-common-v0.3.0)
+
+### ⛰️ Features
+
+
+- Add environment enum - ([149c8e0](https://github.com/TaceoLabs/nodes-helpers/commit/149c8e0dd9d01bf144b9b5fc842993e22ab29c54))
+
+### 🚜 Refactor
+
+
+- [**breaking**] Move aws behind a feature - ([f078a57](https://github.com/TaceoLabs/nodes-helpers/commit/f078a5736015c59fb20eec0b93643c6b83747197))
+- Added prod clippy lints - ([706749a](https://github.com/TaceoLabs/nodes-helpers/commit/706749ae3afd783d5adfe91dae9d0f45f83d4a85))
+
+
 ## [0.2.2](https://github.com/TaceoLabs/nodes-helpers/compare/taceo-nodes-common-v0.2.1...taceo-nodes-common-v0.2.2)
 
 ### ⛰️ Features
