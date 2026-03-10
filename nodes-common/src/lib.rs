@@ -1,3 +1,4 @@
+use core::fmt;
 use std::sync::{
     Arc, Mutex,
     atomic::{AtomicBool, Ordering},
@@ -12,6 +13,50 @@ pub use git_version;
 
 #[cfg(feature = "api")]
 pub mod api;
+
+/// The environment the service is running in.
+///
+/// Main usage for the `Environment` is to call
+/// [`Environment::assert_is_test`]. Services that are intended
+/// for `test` only (like local secret-manager,...)
+/// shall assert that they are called from the `test` environment.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Environment {
+    /// Production environment.
+    Prod,
+    /// Staging environment.
+    Stage,
+    /// Development/Test environment.
+    Test,
+}
+
+impl fmt::Display for Environment {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let str = match self {
+            Environment::Prod => "prod",
+            Environment::Stage => "staging",
+            Environment::Test => "test",
+        };
+        f.write_str(str)
+    }
+}
+
+impl Environment {
+    /// Asserts that `Environment` is `test`. Panics if not the case.
+    pub fn assert_is_test(&self) {
+        assert!(matches!(self, Environment::Test), "Is not test environment")
+    }
+
+    /// Returns `true` if the environment is the test environment.
+    pub fn is_test(&self) -> bool {
+        matches!(self, Environment::Test)
+    }
+
+    /// Returns `true` if the environment is not the test environment.
+    pub fn is_not_test(&self) -> bool {
+        !self.is_test()
+    }
+}
 
 /// Macro to generate version information including the crate name, version, and git hash.
 #[macro_export]
