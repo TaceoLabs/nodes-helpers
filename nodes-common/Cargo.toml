@@ -10,17 +10,18 @@ license.workspace = true
 publish = true
 
 [dependencies]
-aws-config = { workspace = true, features = ["behavior-version-latest"] }
-aws-sdk-secretsmanager = { workspace = true }
+aws-config = { workspace = true, features = ["behavior-version-latest"], optional = true }
+aws-sdk-secretsmanager = { workspace = true, optional = true }
 axum = { workspace = true, optional = true }
 git-version = { workspace = true }
 serde = { workspace = true, features = ["derive"], optional = true }
-tokio = { workspace = true, features = ["macros", "signal"] }
+tokio = { workspace = true, features = ["macros", "rt", "signal"] }
 tokio-util = { workspace = true }
 tower-http = { workspace = true, features = ["set-header"], optional = true }
 tracing.workspace = true
 
 [features]
-default = ["api", "serde"]
+default = ["api", "aws", "serde"]
 api = ["dep:axum", "dep:tower-http"]
+aws = ["dep:aws-config", "dep:aws-sdk-secretsmanager"]
 serde = ["dep:serde"]

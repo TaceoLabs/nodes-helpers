@@ -25,22 +25,19 @@
 //!   used to drive the `/health` endpoint.
 //! * [`spawn_shutdown_task`] / [`default_shutdown_signal`] – wiring for graceful shutdown
 //!   via `CTRL+C` or `SIGTERM`.
-//! * [`localstack_aws_config`] – AWS SDK config pointing at a local `LocalStack` instance,
-//!   intended for use in tests.
 //! * [`version_info!`] – macro that returns a version string containing the crate name,
 //!   semver version, and git hash.
 //! # Optional Features
 //!
 //! * `api` (enabled by default) – exposes `/health` and `/version` Axum endpoints.
 //! * `serde` (enabled by default) – ser/de implementation for [`Environment`].
+//! * `aws` (enabled by default) – adds a method to create a localstack configuration used for testing
 use core::fmt;
 use std::sync::{
     Arc, Mutex,
     atomic::{AtomicBool, Ordering},
 };
 
-use aws_config::Region;
-use aws_sdk_secretsmanager::config::Credentials;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 use tokio::signal;
@@ -58,12 +55,13 @@ pub mod api;
 /// [`Environment::assert_is_test`]. Services that are intended
 /// for `test` only (like local secret-manager,...)
 /// shall assert that they are called from the `test` environment.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[allow(
     clippy::exhaustive_enums,
     reason = "We only expect those three environments at the moment. Changing that is a breaking change."
 )]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "lowercase"))]
 pub enum Environment {
     /// Production environment.
     Prod,
@@ -77,7 +75,7 @@ impl fmt::Display for Environment {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let str = match self {
             Environment::Prod => "prod",
-            Environment::Stage => "staging",
+            Environment::Stage => "stage",
             Environment::Test => "test",
         };
         f.write_str(str)
@@ -171,7 +169,7 @@ pub fn spawn_shutdown_task(
     let cancellation_token = CancellationToken::new();
     let is_graceful = Arc::new(AtomicBool::new(false));
     let task_token = cancellation_token.clone();
-    tokio::spawn({
+    tokio::task::spawn({
         let is_graceful = Arc::clone(&is_graceful);
         async move {
             let _drop_guard = task_token.drop_guard_ref();
@@ -220,6 +218,7 @@ pub async fn default_shutdown_signal() {
     }
 }
 
+#[cfg(feature = "aws")]
 /// Creates an AWS SDK configuration for connecting to a `LocalStack` instance.
 ///
 /// This function is designed to facilitate testing and development by configuring
@@ -228,6 +227,8 @@ pub async fn default_shutdown_signal() {
 /// via the `TEST_AWS_ENDPOINT_URL` environment variable; if not set, it defaults
 /// to `http://localhost:4566`.
 pub async fn localstack_aws_config() -> aws_config::SdkConfig {
+    use aws_config::Region;
+    use aws_sdk_secretsmanager::config::Credentials;
     let region_provider = Region::new("us-east-1");
     let credentials = Credentials::new("test", "test", None, None, "Static");
     // in case we don't want the standard url, we can configure it via the environment
