@@ -1,3 +1,38 @@
+#![deny(missing_docs)]
+#![deny(clippy::all, clippy::pedantic)]
+#![deny(
+    clippy::allow_attributes_without_reason,
+    clippy::assertions_on_result_states,
+    clippy::dbg_macro,
+    clippy::decimal_literal_representation,
+    clippy::exhaustive_enums,
+    clippy::iter_over_hash_type,
+    clippy::let_underscore_must_use,
+    clippy::missing_assert_message,
+    clippy::print_stderr,
+    clippy::print_stdout,
+    clippy::undocumented_unsafe_blocks,
+    clippy::unnecessary_safety_comment,
+    clippy::unwrap_used
+)]
+#![allow(clippy::needless_pass_by_value, reason = "Needed for axum")]
+//! Common utilities for MPC-node services.
+//!
+//! This crate provides building blocks shared across nodes in the MPC network.
+//!
+//! * [`Environment`] – represents the deployment environment (prod / staging / test).
+//! * [`StartedServices`] – tracks whether all async background services have started,
+//!   used to drive the `/health` endpoint.
+//! * [`spawn_shutdown_task`] / [`default_shutdown_signal`] – wiring for graceful shutdown
+//!   via `CTRL+C` or `SIGTERM`.
+//! * [`localstack_aws_config`] – AWS SDK config pointing at a local `LocalStack` instance,
+//!   intended for use in tests.
+//! * [`version_info!`] – macro that returns a version string containing the crate name,
+//!   semver version, and git hash.
+//! # Optional Features
+//!
+//! * `api` (enabled by default) – exposes `/health` and `/version` Axum endpoints.
+//! * `serde` (enabled by default) – ser/de implementation for [`Environment`].
 use core::fmt;
 use std::sync::{
     Arc, Mutex,
@@ -6,12 +41,15 @@ use std::sync::{
 
 use aws_config::Region;
 use aws_sdk_secretsmanager::config::Credentials;
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
 use tokio::signal;
 use tokio_util::sync::CancellationToken;
 
 pub use git_version;
 
 #[cfg(feature = "api")]
+/// See [`api::routes`] and [`api::routes_with_services`].
 pub mod api;
 
 /// The environment the service is running in.
@@ -21,6 +59,11 @@ pub mod api;
 /// for `test` only (like local secret-manager,...)
 /// shall assert that they are called from the `test` environment.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[allow(
+    clippy::exhaustive_enums,
+    reason = "We only expect those three environments at the moment. Changing that is a breaking change."
+)]
 pub enum Environment {
     /// Production environment.
     Prod,
@@ -42,17 +85,23 @@ impl fmt::Display for Environment {
 }
 
 impl Environment {
-    /// Asserts that `Environment` is `test`. Panics if not the case.
+    /// Asserts that the environment is the test environment.
+    ///
+    /// # Panics
+    ///
+    /// Panics with `"Is not test environment"` if `self` is not `Environment::Test`.
     pub fn assert_is_test(&self) {
-        assert!(matches!(self, Environment::Test), "Is not test environment")
+        assert!(self.is_test(), "Is not test environment");
     }
 
     /// Returns `true` if the environment is the test environment.
+    #[must_use]
     pub fn is_test(&self) -> bool {
         matches!(self, Environment::Test)
     }
 
     /// Returns `true` if the environment is not the test environment.
+    #[must_use]
     pub fn is_not_test(&self) -> bool {
         !self.is_test()
     }
@@ -82,6 +131,7 @@ pub struct StartedServices {
 
 impl StartedServices {
     /// Initializes all services as not started.
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
@@ -89,6 +139,8 @@ impl StartedServices {
     /// Adds a new external service to the bookkeeping struct.
     ///
     /// Implementations should call this method for every async task that they start. The returned `AtomicBool` should then be set to `true` if the service is ready.
+    #[must_use]
+    #[allow(clippy::missing_panics_doc, reason = "Ok to panic for lock poisoning")]
     pub fn new_service(&self) -> Arc<AtomicBool> {
         let service = Arc::new(AtomicBool::default());
         self.external_service
@@ -99,6 +151,8 @@ impl StartedServices {
     }
 
     /// Returns `true` if all services did start. If there are no services started, this will also return `true`.
+    #[must_use]
+    #[allow(clippy::missing_panics_doc, reason = "Ok to panic for lock poisoning")]
     pub fn all_started(&self) -> bool {
         self.external_service
             .lock()
@@ -122,19 +176,26 @@ pub fn spawn_shutdown_task(
         async move {
             let _drop_guard = task_token.drop_guard_ref();
             tokio::select! {
-                _ = shutdown_signal => {
+                () = shutdown_signal => {
                     tracing::info!("received graceful shutdown");
                     is_graceful.store(true, Ordering::Relaxed);
                     task_token.cancel();
                 }
-                _ = task_token.cancelled() => {}
+                () = task_token.cancelled() => {}
             }
         }
     });
     (cancellation_token, is_graceful)
 }
 
-/// The default shutdown signal for the oprf-service. Triggered when pressing CTRL+C on most systems.
+/// Returns a future that completes when the application should shut down.
+///
+/// On most systems, it completes when the user presses `CTRL+C`.
+/// On Unix platforms, it also responds to the `SIGTERM` signal.
+///
+/// # Panics
+///
+/// Panics if the `CTRL+C` or `SIGTERM` signal handlers cannot be installed.
 pub async fn default_shutdown_signal() {
     let ctrl_c = async {
         signal::ctrl_c()
@@ -154,15 +215,15 @@ pub async fn default_shutdown_signal() {
     let terminate = std::future::pending::<()>();
 
     tokio::select! {
-        _ = ctrl_c => {},
-        _ = terminate => {},
+        () = ctrl_c => {},
+        () = terminate => {},
     }
 }
 
-/// Creates an AWS SDK configuration for connecting to a LocalStack instance.
+/// Creates an AWS SDK configuration for connecting to a `LocalStack` instance.
 ///
 /// This function is designed to facilitate testing and development by configuring
-/// an AWS SDK client to connect to a LocalStack instance. It sets the region to
+/// an AWS SDK client to connect to a `LocalStack` instance. It sets the region to
 /// `us-east-1` and uses static test credentials. The endpoint URL can be customized
 /// via the `TEST_AWS_ENDPOINT_URL` environment variable; if not set, it defaults
 /// to `http://localhost:4566`.
