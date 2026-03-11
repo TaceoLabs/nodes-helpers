@@ -162,7 +162,7 @@ pub struct PostgresConfig {
     #[serde(default = "PostgresConfig::default_slow_acquire_threshold")]
     #[serde(with = "humantime_serde")]
     pub slow_acquire_threshold: Duration,
-    /// Maximum number of retry attempts when pool creation fails with a
+    /// Maximum number of attempts when pool creation fails with a
     /// transient error (see [module-level docs](self#retry-behaviour) for
     /// the full list).  The database is considered unreachable once all
     /// retries are exhausted.
