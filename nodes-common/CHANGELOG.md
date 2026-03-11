@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+## [0.4.0](https://github.com/TaceoLabs/nodes-helpers/compare/taceo-nodes-common-v0.3.1...taceo-nodes-common-v0.4.0)
+
+### 🚜 Refactor
+
+
+- [**breaking**] Adds a dev environment to distinguish between test-net and local testing ([#13](https://github.com/TaceoLabs/nodes-helpers/pull/13)) - ([d993803](https://github.com/TaceoLabs/nodes-helpers/commit/d993803e9ebfe2dd2d860fba31ee39e7e8135b62))
+
+
 ## [0.3.1](https://github.com/TaceoLabs/nodes-helpers/compare/taceo-nodes-common-v0.3.0...taceo-nodes-common-v0.3.1)
 
 ### ⛰️ Features
