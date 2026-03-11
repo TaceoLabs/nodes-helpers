@@ -55,13 +55,13 @@ pub mod postgres;
 /// The environment the service is running in.
 ///
 /// Main usage for the `Environment` is to call
-/// [`Environment::assert_is_test`]. Services that are intended
-/// for `test` only (like local secret-manager,...)
-/// shall assert that they are called from the `test` environment.
+/// [`Environment::assert_is_dev`]. Services that are intended
+/// for `dev` only (like local secret-manager,...)
+/// shall assert that they are called from the `dev` environment.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[allow(
     clippy::exhaustive_enums,
-    reason = "We only expect those three environments at the moment. Changing that is a breaking change."
+    reason = "We only expect those four environments at the moment. Changing that is a breaking change."
 )]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "lowercase"))]
@@ -70,8 +70,10 @@ pub enum Environment {
     Prod,
     /// Staging environment.
     Stage,
-    /// Development/Test environment.
+    /// Test environment. Used for deployed test nets not for local testing. Use `Dev` instead for local testing.
     Test,
+    /// Local dev environment.
+    Dev,
 }
 
 impl fmt::Display for Environment {
@@ -80,31 +82,32 @@ impl fmt::Display for Environment {
             Environment::Prod => "prod",
             Environment::Stage => "stage",
             Environment::Test => "test",
+            Environment::Dev => "dev",
         };
         f.write_str(str)
     }
 }
 
 impl Environment {
-    /// Asserts that the environment is the test environment.
+    /// Asserts that the environment is the dev environment.
     ///
     /// # Panics
     ///
-    /// Panics with `"Is not test environment"` if `self` is not `Environment::Test`.
-    pub fn assert_is_test(&self) {
-        assert!(self.is_test(), "Is not test environment");
+    /// Panics with `"Is not dev environment"` if `self` is not `Environment::Dev`.
+    pub fn assert_is_dev(&self) {
+        assert!(self.is_dev(), "Is not dev environment");
     }
 
     /// Returns `true` if the environment is the test environment.
     #[must_use]
-    pub fn is_test(&self) -> bool {
-        matches!(self, Environment::Test)
+    pub fn is_dev(&self) -> bool {
+        matches!(self, Environment::Dev)
     }
 
     /// Returns `true` if the environment is not the test environment.
     #[must_use]
-    pub fn is_not_test(&self) -> bool {
-        !self.is_test()
+    pub fn is_not_dev(&self) -> bool {
+        !self.is_dev()
     }
 }
 
