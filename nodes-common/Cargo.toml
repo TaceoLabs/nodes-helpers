@@ -13,15 +13,22 @@ publish = true
 aws-config = { workspace = true, features = ["behavior-version-latest"], optional = true }
 aws-sdk-secretsmanager = { workspace = true, optional = true }
 axum = { workspace = true, optional = true }
+backon = { workspace = true, features = ["std", "tokio-sleep"], optional = true }
 git-version = { workspace = true }
+humantime-serde = { workspace = true, optional = true }
+secrecy = { workspace = true, features = ["serde"], optional = true }
 serde = { workspace = true, features = ["derive"], optional = true }
+sqlx = { workspace = true, features = [
+  "postgres",
+], optional = true }
 tokio = { workspace = true, features = ["macros", "rt", "signal"] }
 tokio-util = { workspace = true }
 tower-http = { workspace = true, features = ["set-header"], optional = true }
 tracing.workspace = true
 
 [features]
-default = ["api", "aws", "serde"]
+default = ["api", "aws", "postgres", "serde"]
 api = ["dep:axum", "dep:tower-http"]
 aws = ["dep:aws-config", "dep:aws-sdk-secretsmanager"]
+postgres = ["dep:backon", "dep:humantime-serde", "dep:secrecy", "dep:sqlx"]
 serde = ["dep:serde"]
