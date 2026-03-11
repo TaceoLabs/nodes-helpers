@@ -69,17 +69,6 @@ use secrecy::{ExposeSecret as _, SecretString};
 use serde::{Deserialize, Deserializer, de};
 use sqlx::{Executor as _, PgPool, postgres::PgPoolOptions};
 
-fn deserialize_schema(s: &str) -> Result<SanitizedSchema, SanitizedSchemaParserError> {
-    if s.is_empty() {
-        return Err(SanitizedSchemaParserError);
-    }
-    if s.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
-        Ok(SanitizedSchema(s.to_owned()))
-    } else {
-        Err(SanitizedSchemaParserError)
-    }
-}
-
 /// A validated `PostgreSQL` schema name.
 ///
 /// Only ASCII alphanumeric characters and underscores (`_`) are
@@ -110,7 +99,14 @@ impl FromStr for SanitizedSchema {
     type Err = SanitizedSchemaParserError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        deserialize_schema(s)
+        if s.is_empty() {
+            return Err(SanitizedSchemaParserError);
+        }
+        if s.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
+            Ok(SanitizedSchema(s.to_owned()))
+        } else {
+            Err(SanitizedSchemaParserError)
+        }
     }
 }
 
@@ -131,7 +127,9 @@ impl<'de> Deserialize<'de> for SanitizedSchema {
     where
         D: Deserializer<'de>,
     {
-        deserialize_schema(&String::deserialize(deserializer)?).map_err(de::Error::custom)
+        String::deserialize(deserializer)?
+            .parse()
+            .map_err(de::Error::custom)
     }
 }
 
