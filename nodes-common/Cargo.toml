@@ -20,6 +20,8 @@ secrecy = { workspace = true, features = ["serde"], optional = true }
 serde = { workspace = true, features = ["derive"], optional = true }
 sqlx = { workspace = true, features = [
   "postgres",
+  "runtime-tokio",
+  "tls-rustls-aws-lc-rs"
 ], optional = true }
 tokio = { workspace = true, features = ["macros", "rt", "signal"] }
 tokio-util = { workspace = true }
