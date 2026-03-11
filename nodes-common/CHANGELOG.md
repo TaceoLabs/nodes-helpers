@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+## [0.3.1](https://github.com/TaceoLabs/nodes-helpers/compare/taceo-nodes-common-v0.3.0...taceo-nodes-common-v0.3.1)
+
+### ⛰️ Features
+
+
+- Add postgres config + connect to pool ([#11](https://github.com/TaceoLabs/nodes-helpers/pull/11)) - ([bfdb1d4](https://github.com/TaceoLabs/nodes-helpers/commit/bfdb1d455a53461d5c696884f589542e0cec1692))
+
+
 ## [0.3.0](https://github.com/TaceoLabs/nodes-helpers/compare/taceo-nodes-common-v0.2.2...taceo-nodes-common-v0.3.0)
 
 ### ⛰️ Features
