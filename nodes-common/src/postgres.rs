@@ -57,32 +57,73 @@
 //! All other variants (e.g. `Configuration`, `ColumnDecode`, `Database`)
 //! are considered **permanent** and cause an immediate failure.
 
+use core::fmt;
 use std::{
     num::{NonZeroU32, NonZeroUsize},
+    str::FromStr,
     time::Duration,
 };
 
 use backon::{BackoffBuilder as _, ConstantBuilder, Retryable as _};
 use secrecy::{ExposeSecret as _, SecretString};
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer, de};
 use sqlx::{Executor as _, PgPool, postgres::PgPoolOptions};
 
-fn deserialize_schema<'de, D>(deserializer: D) -> Result<String, D::Error>
-where
-    D: serde::Deserializer<'de>,
-{
-    let s = String::deserialize(deserializer)?;
+fn deserialize_schema(s: &str) -> Result<SanitizedSchema, SanitizedSchemaParserError> {
     if s.is_empty() {
-        return Err(serde::de::Error::custom("schema string must not be empty"));
+        return Err(SanitizedSchemaParserError);
     }
     if s.chars()
         .all(|c| c.is_alphanumeric() || c == '_' || c == '-')
     {
-        Ok(s)
+        Ok(SanitizedSchema(s.to_owned()))
     } else {
-        Err(serde::de::Error::custom(
-            "schema must contain only alphanumeric, '_', or '-'",
-        ))
+        Err(SanitizedSchemaParserError)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SanitizedSchema(String);
+
+#[derive(Debug, Clone, Copy)]
+pub struct SanitizedSchemaParserError;
+
+impl core::error::Error for SanitizedSchemaParserError {}
+
+impl TryFrom<String> for SanitizedSchema {
+    type Error = SanitizedSchemaParserError;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        value.parse()
+    }
+}
+
+impl FromStr for SanitizedSchema {
+    type Err = SanitizedSchemaParserError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        deserialize_schema(&s)
+    }
+}
+
+impl fmt::Display for SanitizedSchemaParserError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("schema must contain only alphanumeric, '_', or '-' and be not empty")
+    }
+}
+
+impl fmt::Display for SanitizedSchema {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl<'de> Deserialize<'de> for SanitizedSchema {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserialize_schema(&String::deserialize(deserializer)?).map_err(de::Error::custom)
     }
 }
 
@@ -97,8 +138,7 @@ pub struct PostgresConfig {
     /// Database schema to use.  When [`CreateSchema::Yes`] is passed to
     /// [`pg_pool_with_schema`] and the schema does not exist yet, it is
     /// created automatically.
-    #[serde(deserialize_with = "deserialize_schema")]
-    pub schema: String,
+    pub schema: SanitizedSchema,
     /// Maximum number of connections in the connection pool.
     #[serde(default = "PostgresConfig::default_max_connections")]
     pub max_connections: NonZeroU32,
@@ -160,7 +200,7 @@ impl PostgresConfig {
     /// - `max_retries`: 20
     /// - `retry_delay`: 5 seconds
     #[must_use]
-    pub fn with_default_values(connection_string: SecretString, schema: String) -> Self {
+    pub fn with_default_values(connection_string: SecretString, schema: SanitizedSchema) -> Self {
         Self {
             connection_string,
             schema,
@@ -174,7 +214,7 @@ impl PostgresConfig {
 }
 #[must_use]
 #[inline]
-fn schema_connect_with_create(schema: &str) -> String {
+fn schema_connect_with_create(schema: &SanitizedSchema) -> String {
     format!(
         r#"
             CREATE SCHEMA IF NOT EXISTS "{schema}";
@@ -182,7 +222,7 @@ fn schema_connect_with_create(schema: &str) -> String {
         "#
     )
 }
-fn schema_connect(schema: &str) -> String {
+fn schema_connect(schema: &SanitizedSchema) -> String {
     format!(
         r#"
             SET search_path TO "{schema}";
