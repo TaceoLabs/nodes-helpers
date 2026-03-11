@@ -32,5 +32,11 @@ tracing.workspace = true
 default = ["api", "aws", "postgres", "serde"]
 api = ["dep:axum", "dep:tower-http"]
 aws = ["dep:aws-config", "dep:aws-sdk-secretsmanager"]
-postgres = ["dep:backon", "dep:humantime-serde", "dep:secrecy", "dep:sqlx"]
+postgres = [
+  "dep:backon",
+  "dep:humantime-serde",
+  "dep:secrecy",
+  "dep:serde",
+  "dep:sqlx"
+]
 serde = ["dep:serde"]
