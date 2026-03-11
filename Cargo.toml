@@ -13,15 +13,18 @@ license = "MIT OR Apache-2.0"
 aws-config = "1"
 aws-sdk-secretsmanager = "1"
 axum = "0.8"
+backon = { version = "1.6", default-features = false }
 eyre = "0.6"
 git-version = "0.3"
 humantime = "2.2"
+humantime-serde = "1.1.1"
 metrics = "0.24.2"
 metrics-exporter-dogstatsd = "0.9"
 metrics-exporter-prometheus = "0.17"
 metrics-exporter-statsd = "0.9"
 secrecy = "0.10"
 serde = { version = "1", default-features = false }
+sqlx = { version = "0.8", default-features = false }
 telemetry-batteries = "0.1.2"
 tokio = { version = "1" }
 tokio-util = "0.7"

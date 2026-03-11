@@ -6,6 +6,7 @@
     clippy::dbg_macro,
     clippy::decimal_literal_representation,
     clippy::exhaustive_enums,
+    clippy::exhaustive_structs,
     clippy::iter_over_hash_type,
     clippy::let_underscore_must_use,
     clippy::missing_assert_message,
@@ -48,6 +49,8 @@ pub use git_version;
 #[cfg(feature = "api")]
 /// See [`api::routes`] and [`api::routes_with_services`].
 pub mod api;
+#[cfg(feature = "postgres")]
+pub mod postgres;
 
 /// The environment the service is running in.
 ///
