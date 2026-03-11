@@ -116,7 +116,7 @@ impl FromStr for SanitizedSchema {
 
 impl fmt::Display for SanitizedSchemaParserError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("schema must contain only ASCII alphanumeric and '_' and be not empty")
+        f.write_str("schema must contain only ASCII alphanumeric and '_' and must not be empty")
     }
 }
 
