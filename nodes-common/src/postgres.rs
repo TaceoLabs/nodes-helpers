@@ -73,7 +73,7 @@ fn deserialize_schema(s: &str) -> Result<SanitizedSchema, SanitizedSchemaParserE
     if s.is_empty() {
         return Err(SanitizedSchemaParserError);
     }
-    if s.chars().all(|c| c.is_alphanumeric() || c == '_') {
+    if s.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
         Ok(SanitizedSchema(s.to_owned()))
     } else {
         Err(SanitizedSchemaParserError)
@@ -82,7 +82,7 @@ fn deserialize_schema(s: &str) -> Result<SanitizedSchema, SanitizedSchemaParserE
 
 /// A validated `PostgreSQL` schema name.
 ///
-/// Only alphanumeric characters and underscores (`_`) are
+/// Only ASCII alphanumeric characters and underscores (`_`) are
 /// allowed.  Use [`FromStr`], [`TryFrom<String>`], or serde deserialization
 /// to construct an instance — all paths go through the same validation.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -116,7 +116,7 @@ impl FromStr for SanitizedSchema {
 
 impl fmt::Display for SanitizedSchemaParserError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("schema must contain only alphanumeric and '_' and be not empty")
+        f.write_str("schema must contain only ASCII alphanumeric and '_' and be not empty")
     }
 }
 
