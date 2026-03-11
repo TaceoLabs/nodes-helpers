@@ -28,7 +28,7 @@
 //!
 //! let config = PostgresConfig::with_default_values(
 //!     SecretString::from("postgres://user:pass@localhost/db"),
-//!     "my_schema".to_owned(),
+//!     "my_schema".parse().unwrap(),
 //! );
 //! println!("{:?}", config);
 //! ```
@@ -73,19 +73,27 @@ fn deserialize_schema(s: &str) -> Result<SanitizedSchema, SanitizedSchemaParserE
     if s.is_empty() {
         return Err(SanitizedSchemaParserError);
     }
-    if s.chars()
-        .all(|c| c.is_alphanumeric() || c == '_' || c == '-')
-    {
+    if s.chars().all(|c| c.is_alphanumeric() || c == '_') {
         Ok(SanitizedSchema(s.to_owned()))
     } else {
         Err(SanitizedSchemaParserError)
     }
 }
 
+/// A validated `PostgreSQL` schema name.
+///
+/// Only alphanumeric characters and underscores (`_`) are
+/// allowed.  Use [`FromStr`], [`TryFrom<String>`], or serde deserialization
+/// to construct an instance — all paths go through the same validation.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct SanitizedSchema(String);
 
+/// Error returned when a schema name fails validation.
+///
+/// See [`SanitizedSchema`] for the allowed character set.
 #[derive(Debug, Clone, Copy)]
+#[non_exhaustive]
 pub struct SanitizedSchemaParserError;
 
 impl core::error::Error for SanitizedSchemaParserError {}
@@ -102,13 +110,13 @@ impl FromStr for SanitizedSchema {
     type Err = SanitizedSchemaParserError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        deserialize_schema(&s)
+        deserialize_schema(s)
     }
 }
 
 impl fmt::Display for SanitizedSchemaParserError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("schema must contain only alphanumeric, '_', or '-' and be not empty")
+        f.write_str("schema must contain only alphanumeric and '_' and be not empty")
     }
 }
 
@@ -142,7 +150,9 @@ pub struct PostgresConfig {
     /// Maximum number of connections in the connection pool.
     #[serde(default = "PostgresConfig::default_max_connections")]
     pub max_connections: NonZeroU32,
-    /// Timeout for acquiring a new connection from the pool. If a connection is not established within this duration, a linear backoff strategy is started.
+    /// Timeout for acquiring a connection from the pool.  If no connection
+    /// becomes available within this duration, the acquire operation fails
+    /// with [`sqlx::Error::PoolTimedOut`].
     #[serde(default = "PostgresConfig::default_acquire_timeout")]
     #[serde(with = "humantime_serde")]
     pub acquire_timeout: Duration,
@@ -299,7 +309,7 @@ pub async fn pg_pool_with_schema(
     .sleep(tokio::time::sleep)
     .when(is_retryable_error)
     .notify(|e, duration| {
-        tracing::warn!("Timeout while creating pool: {e:?} Retry after {duration:?}");
+        tracing::warn!("Failed to create pool: {e:?}. Retry after {duration:?}");
     })
     .await
 }
