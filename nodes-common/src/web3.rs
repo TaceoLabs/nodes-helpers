@@ -38,7 +38,10 @@ use alloy::{
     rpc::{client::RpcClient, json_rpc::RequestPacket},
     transports::{
         RpcError, TransportError, TransportErrorKind,
-        http::{Http, reqwest::Url},
+        http::{
+            Http,
+            reqwest::{self, Url},
+        },
         layers::{FallbackLayer, OrRetryPolicyFn, RateLimitRetryPolicy, RetryPolicy},
     },
 };
@@ -89,6 +92,12 @@ pub struct RpcProviderConfig {
     /// If provided, the [`ChainIdFiller`] will automatically populate
     /// transactions with this value.
     pub chain_id: Option<ChainId>,
+    /// The timeout for HTTP requests to the RPC.
+    ///
+    /// Defaults to **10 seconds**.
+    #[serde(default = "RpcProviderConfig::default_timeout")]
+    #[serde(with = "humantime_serde")]
+    pub timeout: Duration,
     /// Retry configuration applied to RPC requests.
     #[serde(default)]
     pub retry_policy_config: RetryPolicyConfig,
@@ -129,9 +138,15 @@ impl RpcProviderConfig {
         Self {
             http_urls,
             ws_url,
+            timeout: Self::default_timeout(),
             chain_id: None,
             retry_policy_config: RetryPolicyConfig::default(),
         }
+    }
+
+    /// Default timeout for HTTP requests to the RPC: 10 seconds
+    fn default_timeout() -> Duration {
+        Duration::from_secs(10)
     }
 }
 
@@ -177,6 +192,7 @@ pub struct RpcProviderBuilder {
     ws_rpc_url: Url,
     retry_policy_config: RetryPolicyConfig,
     chain_id: Option<ChainId>,
+    timeout: Duration,
     is_local: bool,
     wallet: Option<EthereumWallet>,
 }
@@ -210,6 +226,7 @@ impl RpcProviderBuilder {
             http_urls: config.http_urls.clone(),
             ws_rpc_url: config.ws_url.clone(),
             retry_policy_config: config.retry_policy_config.clone(),
+            timeout: config.timeout,
             chain_id: config.chain_id,
             is_local: false,
             wallet: None,
@@ -263,6 +280,13 @@ impl RpcProviderBuilder {
         self
     }
 
+    /// Sets the timeout for HTTP RPC requests.
+    #[must_use]
+    pub fn http_timeout(mut self, timeout: Duration) -> Self {
+        self.timeout = timeout;
+        self
+    }
+
     /// Sets the chain ID used by the provider.
     ///
     /// The chain ID will be automatically applied to all transactions via
@@ -304,22 +328,33 @@ impl RpcProviderBuilder {
     ///
     /// Returns a [`TransportError`] if establishing the WebSocket connection
     /// fails or if the HTTP provider cannot be properly initialized.
-    #[allow(
-        clippy::missing_panics_doc,
-        reason = "Cannot truly panic as we checked the invariant in the constructor"
-    )]
+    ///
+    /// # Panics
+    ///
+    /// If the method fails to build the `reqwest` client for HTTP requests.
+    /// This can happen due to:
+    /// * a TLS backend cannot be initialized,
+    /// * the resolver cannot load the system configuration.
     pub async fn build(self) -> Result<RpcProvider, TransportError> {
         let Self {
             http_urls,
             retry_policy_config,
             chain_id,
+            timeout,
             is_local,
             wallet,
             ws_rpc_url,
         } = self;
 
+        let reqwest = reqwest::ClientBuilder::new()
+            .timeout(timeout)
+            .build()
+            .expect("Failed to build reqwest HTTP client");
         // Build HTTP transports
-        let transports = http_urls.into_iter().map(Http::new).collect::<Vec<_>>();
+        let transports = http_urls
+            .into_iter()
+            .map(|url| Http::with_client(reqwest.clone(), url))
+            .collect::<Vec<_>>();
         let transport_count =
             NonZeroUsize::try_from(transports.len()).expect("Checked non-empty in with_config");
 
