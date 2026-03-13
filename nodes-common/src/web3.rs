@@ -45,7 +45,7 @@ use alloy::{
         layers::{FallbackLayer, OrRetryPolicyFn, RateLimitRetryPolicy, RetryPolicy},
     },
 };
-use backon::{BackoffBuilder as _, ExponentialBuilder, Retryable as _};
+use backon::{ExponentialBuilder, Retryable as _};
 use serde::Deserialize;
 use tower::{Layer, Service, ServiceBuilder};
 
@@ -373,6 +373,8 @@ impl RpcProviderBuilder {
                 RpcError::Transport(TransportErrorKind::HttpError(e)) => {
                     matches!(e.status, 408 | 502 | 504)
                 }
+                // http reqwest time error is wrapped here. Just always retry custom errors.
+                RpcError::Transport(TransportErrorKind::Custom(_)) => true,
                 _ => false,
             });
 
@@ -507,7 +509,7 @@ where
 
         Box::pin(async move {
             (|| service.clone().call_and_parse_error(request.clone()))
-                .retry(backoff.build())
+                .retry(backoff)
                 .sleep(tokio::time::sleep)
                 .when(|e| policy.should_retry(e))
                 .notify(|_, duration| tracing::debug!("Retrying RPC request after: {duration:?}"))
