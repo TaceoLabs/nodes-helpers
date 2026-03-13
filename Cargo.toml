@@ -10,6 +10,7 @@ repository = "https://github.com/TaceoLabs/nodes-helpers"
 license = "MIT OR Apache-2.0"
 
 [workspace.dependencies]
+alloy = { version = "1.6" }
 aws-config = "1"
 aws-sdk-secretsmanager = "1"
 axum = "0.8"
@@ -28,6 +29,7 @@ sqlx = { version = "0.8", default-features = false }
 telemetry-batteries = "0.1.2"
 tokio = { version = "1" }
 tokio-util = "0.7"
+tower = { version = "0.5" }
 tower-http = "0.6"
 tracing = "0.1"
 tracing-subscriber = "0.3"
