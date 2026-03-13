@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+## [0.4.2](https://github.com/TaceoLabs/nodes-helpers/compare/taceo-nodes-common-v0.4.1...taceo-nodes-common-v0.4.2)
+
+### 🐛 Bug Fixes
+
+
+- Now also retry custom errors (and reqwest timeouts) ([#18](https://github.com/TaceoLabs/nodes-helpers/pull/18)) - ([3ad5976](https://github.com/TaceoLabs/nodes-helpers/commit/3ad59762aa9c607aa1e05c448c876cb185dd4ba3))
+
+
 ## [0.4.1](https://github.com/TaceoLabs/nodes-helpers/compare/taceo-nodes-common-v0.4.0...taceo-nodes-common-v0.4.1)
 
 ### ⛰️ Features
