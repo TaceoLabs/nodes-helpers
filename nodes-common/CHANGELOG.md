@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+## [0.4.1](https://github.com/TaceoLabs/nodes-helpers/compare/taceo-nodes-common-v0.4.0...taceo-nodes-common-v0.4.1)
+
+### ⛰️ Features
+
+
+- Add web3 module to configure RPC providers ([#15](https://github.com/TaceoLabs/nodes-helpers/pull/15)) - ([29c4ba3](https://github.com/TaceoLabs/nodes-helpers/commit/29c4ba38d7e397b125ec5740fbf6ba5eaf28d83f))
+
+
 ## [0.4.0](https://github.com/TaceoLabs/nodes-helpers/compare/taceo-nodes-common-v0.3.1...taceo-nodes-common-v0.4.0)
 
 ### 🚜 Refactor
