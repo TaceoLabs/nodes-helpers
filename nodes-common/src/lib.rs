@@ -51,6 +51,8 @@ pub use git_version;
 pub mod api;
 #[cfg(feature = "postgres")]
 pub mod postgres;
+#[cfg(feature = "alloy")]
+pub mod web3;
 
 /// The environment the service is running in.
 ///
