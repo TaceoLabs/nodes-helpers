@@ -505,7 +505,11 @@ where
                 .sleep(tokio::time::sleep)
                 .when(|e| policy.should_retry(e))
                 .notify(|_, duration| tracing::debug!("Retrying RPC request after: {duration:?}"))
-                .adjust(|e, dur| policy.backoff_hint(e).or(dur))
+                // Adjust the backoff duration based on the policy and the current hint:
+                // - If `dur` is `None`, we stop retrying (max attempts reached).
+                // - If `dur` is `Some(d)` and the policy provides a backoff hint, use the policy hint.
+                // - If `dur` is `Some(d)` and the policy hint is `None`, use the original `d`.
+                .adjust(|e, dur| dur.and_then(|d| policy.backoff_hint(e).or(Some(d))))
                 .await
         })
     }
