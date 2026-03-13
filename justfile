@@ -11,7 +11,7 @@ lint:
 
 lint-subcrate SUBCRATE:
     cd {{ SUBCRATE }} && cargo all-features clippy --all-targets -q -- -D warnings
-    cd {{ SUBCRATE }} && RUSTDOCFLAGS='-D warnings' cargo all-features doc -q --no-deps
+    cd {{ SUBCRATE }} && RUSTDOCFLAGS='-D warnings' cargo doc --all-features -q --no-deps
 
 test:
     cargo test --all-features --all-targets
