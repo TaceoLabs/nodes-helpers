@@ -361,7 +361,13 @@ impl RpcProviderBuilder {
         // Configure fallback layer
         let fallback_layer = FallbackLayer::default().with_active_transport_count(transport_count);
 
-        // Configure retry policy
+        // Configure retry policy.
+        //
+        // The RateLimitRetryPolicy already handles 503 Service Unavailable and other common RPC errors.
+        // We additionally check for other common transient errors:
+        //   - 408 Request Timeout
+        //   - 502 Bad Gateway
+        //   - 504 Gateway Timeout
         let retry_policy =
             RateLimitRetryPolicy::default().or(|error: &TransportError| match error {
                 RpcError::Transport(TransportErrorKind::HttpError(e)) => {
@@ -531,9 +537,9 @@ where
         mut self,
         request: RequestPacket,
     ) -> Result<alloy::rpc::json_rpc::ResponsePacket, RpcError<TransportErrorKind>> {
-        let resp = self.inner.call(request.clone()).await?;
+        let resp = self.inner.call(request).await?;
         if let Some(e) = resp.as_error() {
-            Err(TransportError::ErrorResp(e.clone()))
+            Err(TransportError::ErrorResp(e.to_owned()))
         } else {
             Ok(resp)
         }
