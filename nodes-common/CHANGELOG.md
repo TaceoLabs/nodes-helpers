@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+## [0.4.3](https://github.com/TaceoLabs/nodes-helpers/compare/taceo-nodes-common-v0.4.2...taceo-nodes-common-v0.4.3)
+
+### ⛰️ Features
+
+
+- Added configurable poll_interval for web3 ([#21](https://github.com/TaceoLabs/nodes-helpers/pull/21)) - ([641296d](https://github.com/TaceoLabs/nodes-helpers/commit/641296dcd0edd69a877b733a3b32e92d855702ad))
+
+
 ## [0.4.2](https://github.com/TaceoLabs/nodes-helpers/compare/taceo-nodes-common-v0.4.1...taceo-nodes-common-v0.4.2)
 
 ### 🐛 Bug Fixes
