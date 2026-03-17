@@ -91,6 +91,7 @@ pub struct RpcProviderConfig {
     ///
     /// If provided, the [`ChainIdFiller`] will automatically populate
     /// transactions with this value.
+    #[serde(default)]
     pub chain_id: Option<ChainId>,
     /// The timeout for HTTP requests to the RPC.
     ///
@@ -98,6 +99,12 @@ pub struct RpcProviderConfig {
     #[serde(default = "RpcProviderConfig::default_timeout")]
     #[serde(with = "humantime_serde")]
     pub timeout: Duration,
+    /// The poll interval for the confirmation heartbeat for alloy.
+    ///
+    /// Uses the alloys default setting if omitted. For `dev` environment 250ms and for all other environments 7s.
+    #[serde(default)]
+    #[serde(with = "humantime_serde")]
+    pub confirmations_poll_interval: Option<Duration>,
     /// Retry configuration applied to RPC requests.
     #[serde(default)]
     pub retry_policy_config: RetryPolicyConfig,
@@ -139,6 +146,7 @@ impl RpcProviderConfig {
             http_urls,
             ws_url,
             timeout: Self::default_timeout(),
+            confirmations_poll_interval: None,
             chain_id: None,
             retry_policy_config: RetryPolicyConfig::default(),
         }
@@ -193,6 +201,7 @@ pub struct RpcProviderBuilder {
     retry_policy_config: RetryPolicyConfig,
     chain_id: Option<ChainId>,
     timeout: Duration,
+    confirmations_poll_interval: Option<Duration>,
     is_local: bool,
     wallet: Option<EthereumWallet>,
 }
@@ -230,6 +239,7 @@ impl RpcProviderBuilder {
             chain_id: config.chain_id,
             is_local: false,
             wallet: None,
+            confirmations_poll_interval: config.confirmations_poll_interval,
         }
     }
 
@@ -284,6 +294,13 @@ impl RpcProviderBuilder {
     #[must_use]
     pub fn http_timeout(mut self, timeout: Duration) -> Self {
         self.timeout = timeout;
+        self
+    }
+
+    /// Sets the poll interval in which alloy fetches blocks for transaction confirmations.
+    #[must_use]
+    pub fn confirmations_poll_interval(mut self, confirmations_poll_interval: Duration) -> Self {
+        self.confirmations_poll_interval = Some(confirmations_poll_interval);
         self
     }
 
@@ -344,6 +361,7 @@ impl RpcProviderBuilder {
             is_local,
             wallet,
             ws_rpc_url,
+            confirmations_poll_interval,
         } = self;
 
         let reqwest = reqwest::ClientBuilder::new()
@@ -387,6 +405,11 @@ impl RpcProviderBuilder {
             .service(transports);
 
         let client = RpcClient::builder().transport(transport, is_local);
+        let client = if let Some(confirmations_poll_interval) = confirmations_poll_interval {
+            client.with_poll_interval(confirmations_poll_interval)
+        } else {
+            client
+        };
 
         // Configure HTTP provider
         let http_provider_builder = ProviderBuilder::new()
