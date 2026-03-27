@@ -3,15 +3,29 @@
 //! Provides helpers for querying whether an on-chain contract implements a
 //! given interface according to [EIP-165](https://eips.ethereum.org/EIPS/eip-165).
 //!
-//! The implementation is inspired by `OpenZeppelin's`
+//! The implementation is inspired by `OpenZeppelin`'s
 //! [`ERC165Checker.sol`](https://github.com/OpenZeppelin/openzeppelin-contracts/blob/5e28952cbdc0eb7d19ee62580ab31b30c2376e48/contracts/utils/introspection/ERC165Checker.sol).
 //!
-//! * [`RpcProvider::ensure_erc165_conform`] – checks whether a contract correctly
-//!   implements the ERC-165 `supportsInterface` function.
-//! * [`RpcProvider::erc165_supports_interface`] – checks ERC-165 conformance
-//!   **and** support for a specific interface in one call.
+//! # Usage
+//!
+//! For most use cases, call [`RpcProvider::erc165_supports_interface_unchecked`]
+//! directly. It queries whether the target contract reports support for the given
+//! interface and returns `Ok(())` or `Err(`[`ERC165ConfirmError::Unsupported`]`)`.
+//! It does **not** enforce that the contract is ERC-165 compliant — if you only
+//! care that the interface is supported, this is the right method to use.
+//!
+//! Use [`RpcProvider::erc165_supports_interface`] when you also need to enforce
+//! strict ERC-165 compliance — i.e., the contract must not claim to support the
+//! invalid interface `0xffffffff`. Both checks run concurrently.
+//!
+//! Use [`RpcProvider::ensure_erc165_conform`] to verify ERC-165 compliance
+//! independently of a specific interface query.
+//!
 //! * [`RpcProvider::erc165_supports_interface_unchecked`] – queries interface
-//!   support **without** first verifying ERC-165 conformance.
+//!   support without enforcing ERC-165 compliance. Preferred for most callers.
+//! * [`RpcProvider::erc165_supports_interface`] – checks interface support
+//!   **and** strict ERC-165 compliance concurrently.
+//! * [`RpcProvider::ensure_erc165_conform`] – verifies ERC-165 compliance only.
 //! * [`erc165_interface_selector`] – computes the ERC-165 interface identifier
 //!   by XOR-ing the given function selectors.
 
@@ -48,7 +62,7 @@ pub const ERC_165_SUPPORTS_INTERFACE_SELECTOR: [u8; 4] = [0x01, 0xff, 0xc9, 0xa7
 ///
 /// Per the EIP-165 specification, no compliant contract may claim
 /// support for this value. Corresponds to `_INTERFACE_ID_INVALID` in
-/// `OpenZeppelin's` `ERC165Checker`.
+/// `OpenZeppelin`'s `ERC165Checker`.
 pub const INVALID_INTERFACE_SELECTOR: [u8; 4] = [0xff, 0xff, 0xff, 0xff];
 
 /// Computes an ERC-165 interface identifier from an iterator of function selectors.
@@ -103,14 +117,6 @@ pub enum ERC165ConfirmError {
     /// The contract does not conform to the requested interface.
     #[error("The contract does not support the requested interface")]
     Unsupported,
-    /// The contract claims to support the invalid interface identifier
-    /// `0xffffffff`, which violates the EIP-165 specification.
-    ///
-    /// Importantly it supports the requested interface, so callers might still accept the contract as valid.
-    #[error(
-        "Supports 0xffffffff interface which is not allowed, but conforms to requested interface"
-    )]
-    ConfirmsButAlsoToInvalidInterface,
     /// An RPC transport error occurred while querying the contract.
     #[error(transparent)]
     TransportError(#[from] TransportErrorKind),
@@ -127,24 +133,16 @@ impl RpcProvider {
     ///
     /// Both calls are executed **concurrently** via [`tokio::join!`].
     ///
-    /// Inspired by `OpenZeppelin's`
+    /// Inspired by `OpenZeppelin`'s
     /// [`ERC165Checker.supportsERC165`](https://github.com/OpenZeppelin/openzeppelin-contracts/blob/5e28952cbdc0eb7d19ee62580ab31b30c2376e48/contracts/utils/introspection/ERC165Checker.sol#L24).
     ///
     /// # Errors
     ///
     /// * [`ERC165ConfirmError::NotAContract`] – the address has no deployed code.
-    /// * [`ERC165ConfirmError::Unsupported`] – the contract does not support the
-    ///   ERC-165 `supportsInterface` selector.
-    /// * [`ERC165ConfirmError::ConfirmsButAlsoToInvalidInterface`] – the contract
-    ///   claims to support `0xffffffff`, violating the spec.
+    /// * [`ERC165ConfirmError::Unsupported`] – the contract is not ERC-165
+    ///   conformant: either it does not respond to `supportsInterface(0x01ffc9a7)`,
+    ///   or it incorrectly claims to support the invalid interface `0xffffffff`.
     /// * [`ERC165ConfirmError::TransportError`] – an RPC transport failure.
-    ///
-    /// # Differences from `OpenZeppelin`
-    ///
-    /// `OpenZeppelin's` `supportsERC165` returns `false` when a contract claims to support
-    /// the invalid interface `0xffffffff`. This implementation returns
-    /// [`ERC165ConfirmError::ConfirmsButAlsoToInvalidInterface`] instead, allowing
-    /// callers to distinguish spec-violating contracts from non-ERC-165 ones.
     pub async fn ensure_erc165_conform(&self, address: Address) -> Result<(), ERC165ConfirmError> {
         let maybe_erc165 = ERC165Instance::new(address, self.http());
         let supports_erc165_call =
@@ -160,7 +158,7 @@ impl RpcProvider {
         unwrap_erc165_call(supports_erc165)?;
 
         match supports_invalid {
-            Ok(()) => Err(ERC165ConfirmError::ConfirmsButAlsoToInvalidInterface),
+            Ok(()) => Err(ERC165ConfirmError::Unsupported),
             Err(ERC165ConfirmError::Unsupported) => Ok(()),
             Err(err) => Err(err),
         }
@@ -170,7 +168,7 @@ impl RpcProvider {
     /// identified by the XOR of the given `selectors`, **without** first
     /// verifying ERC-165 conformance.
     ///
-    /// Inspired by `OpenZeppelin's`
+    /// Inspired by `OpenZeppelin`'s
     /// [`ERC165Checker.supportsERC165InterfaceUnchecked`](https://github.com/OpenZeppelin/openzeppelin-contracts/blob/5e28952cbdc0eb7d19ee62580ab31b30c2376e48/contracts/utils/introspection/ERC165Checker.sol#L107).
     ///
     /// # Errors
@@ -179,12 +177,11 @@ impl RpcProvider {
     /// requested interface, on transport failures, or if the target address
     /// is not a deployed contract.
     ///
-    /// # Preconditions
+    /// # Note
     ///
-    /// Callers should verify ERC-165 conformance beforehand (see
-    /// [`RpcProvider::ensure_erc165_conform`]) or use
-    /// [`RpcProvider::erc165_supports_interface`] which performs that check
-    /// automatically.
+    /// This method does not verify strict ERC-165 compliance. Use
+    /// [`RpcProvider::erc165_supports_interface`] if you also want to ensure
+    /// the contract does not claim to support the invalid interface `0xffffffff`.
     pub async fn erc165_supports_interface_unchecked(
         &self,
         address: Address,
@@ -210,7 +207,7 @@ impl RpcProvider {
     ///
     /// Both steps run **concurrently** via [`tokio::join!`].
     ///
-    /// Inspired by `OpenZeppelin's`
+    /// Inspired by `OpenZeppelin`'s
     /// [`ERC165Checker.supportsInterface`](https://github.com/OpenZeppelin/openzeppelin-contracts/blob/5e28952cbdc0eb7d19ee62580ab31b30c2376e48/contracts/utils/introspection/ERC165Checker.sol#L36).
     ///
     /// # Errors
@@ -430,23 +427,20 @@ mod tests {
         assert!(
             matches!(
                 support_interface_erc165,
-                Err(ERC165ConfirmError::ConfirmsButAlsoToInvalidInterface)
+                Err(ERC165ConfirmError::Unsupported)
             ),
-            "Should fail with ConfirmsButAlsoToInvalidInterface"
+            "Should fail with Unsupported (0xffffffff violation)"
         );
         assert!(
-            matches!(
-                is_erc165_conform,
-                Err(ERC165ConfirmError::ConfirmsButAlsoToInvalidInterface)
-            ),
-            "Should fail with ConfirmsButAlsoToInvalidInterface"
+            matches!(is_erc165_conform, Err(ERC165ConfirmError::Unsupported)),
+            "Should fail with Unsupported (0xffffffff violation)"
         );
 
         support_interface_erc165_unchecked.expect("Should work on unchecked call");
 
         // Calling with a selector the contract does NOT support:
         // erc165_supports_interface_unchecked returns Err(Unsupported)
-        // is_erc165_conform returns Err(ConfirmsButAlsoToInvalidInterface)
+        // ensure_erc165_conform returns Err(Unsupported) (0xffffffff violation)
         // The first ? propagates Unsupported.
         let support_unsupported_interface = rpc_provider
             .erc165_supports_interface(
