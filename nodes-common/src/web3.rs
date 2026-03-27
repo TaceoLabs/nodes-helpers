@@ -598,7 +598,7 @@ pub(crate) mod tests {
             .environment(Environment::Dev);
         if with_wallet == WithWallet::Yes {
             rpc_provider_builder =
-                rpc_provider_builder.wallet(anvil.wallet().expect("anvil should have a wallet"))
+                rpc_provider_builder.wallet(anvil.wallet().expect("anvil should have a wallet"));
         }
         let rpc_provider = rpc_provider_builder
             .chain_id(31_337)

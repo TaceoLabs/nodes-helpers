@@ -3,7 +3,7 @@
 //! Provides helpers for querying whether an on-chain contract implements a
 //! given interface according to [EIP-165](https://eips.ethereum.org/EIPS/eip-165).
 //!
-//! The implementation is inspired by OpenZeppelin's
+//! The implementation is inspired by `OpenZeppelin's`
 //! [`ERC165Checker.sol`](https://github.com/OpenZeppelin/openzeppelin-contracts/blob/5e28952cbdc0eb7d19ee62580ab31b30c2376e48/contracts/utils/introspection/ERC165Checker.sol).
 //!
 //! * [`RpcProvider::is_erc165_conform`] – checks whether a contract correctly
@@ -18,12 +18,14 @@
 use alloy::{
     primitives::{Address, FixedBytes},
     sol,
-    transports::TransportError,
+    transports::{TransportError, TransportErrorKind},
 };
 
 use crate::web3::{RpcProvider, erc165::ERC165::ERC165Instance};
 
 sol!(
+    #[allow(clippy::exhaustive_structs, reason="comes from sol macro")]
+    #[allow(clippy::exhaustive_enums, reason="comes from sol macro")]
     #[sol(rpc)]
     interface ERC165 {
         /// @notice Query if a contract implements an interface
@@ -46,7 +48,7 @@ pub const ERC_165_SUPPORTS_INTERFACE_SELECTOR: [u8; 4] = [0x01, 0xff, 0xc9, 0xa7
 ///
 /// Per the EIP-165 specification, no compliant contract may claim
 /// support for this value. Corresponds to `_INTERFACE_ID_INVALID` in
-/// OpenZeppelin's `ERC165Checker`.
+/// `OpenZeppelin's` `ERC165Checker`.
 pub const INVALID_INTERFACE_SELECTOR: [u8; 4] = [0xff, 0xff, 0xff, 0xff];
 
 /// Computes an ERC-165 interface identifier from an iterator of function selectors.
@@ -83,7 +85,8 @@ fn unwrap_erc165_call(
     match call {
         Ok(valid) => Ok(valid),
         Err(alloy::contract::Error::ZeroData(_, _)) => Err(ERC165ConfirmError::NotAContract),
-        Err(alloy::contract::Error::TransportError(transport_error)) => {
+        // There was an RPC transport error
+        Err(alloy::contract::Error::TransportError(TransportError::Transport(transport_error))) => {
             Err(ERC165ConfirmError::TransportError(transport_error))
         }
         // every other error means it does not support the interface
@@ -93,6 +96,7 @@ fn unwrap_erc165_call(
 
 /// Errors returned by the ERC-165 conformance and interface-support checks.
 #[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
 pub enum ERC165ConfirmError {
     /// The target address does not contain a deployed contract
     /// (the call returned zero data).
@@ -108,7 +112,7 @@ pub enum ERC165ConfirmError {
     ConfirmsButAlsoToInvalidInterface,
     /// An RPC transport error occurred while querying the contract.
     #[error(transparent)]
-    TransportError(#[from] TransportError),
+    TransportError(#[from] TransportErrorKind),
 }
 
 impl RpcProvider {
@@ -122,7 +126,7 @@ impl RpcProvider {
     ///
     /// Both calls are executed **concurrently** via [`tokio::join!`].
     ///
-    /// Inspired by OpenZeppelin's
+    /// Inspired by `OpenZeppelin's`
     /// [`ERC165Checker.supportsERC165`](https://github.com/OpenZeppelin/openzeppelin-contracts/blob/5e28952cbdc0eb7d19ee62580ab31b30c2376e48/contracts/utils/introspection/ERC165Checker.sol#L24).
     ///
     /// # Errors
@@ -131,6 +135,13 @@ impl RpcProvider {
     /// * [`ERC165ConfirmError::ConfirmsButAlsoToInvalidInterface`] – the contract
     ///   claims to support `0xffffffff`, violating the spec.
     /// * [`ERC165ConfirmError::TransportError`] – an RPC transport failure.
+    ///
+    /// # Differences from `OpenZeppelin`
+    ///
+    /// `OpenZeppelin's` `supportsERC165` returns `false` when a contract claims to support
+    /// the invalid interface `0xffffffff`. This implementation returns
+    /// [`ERC165ConfirmError::ConfirmsButAlsoToInvalidInterface`] instead, allowing
+    /// callers to distinguish spec-violating contracts from non-ERC-165 ones.
     pub async fn is_erc165_conform(&self, address: Address) -> Result<bool, ERC165ConfirmError> {
         let maybe_erc165 = ERC165Instance::new(address, self.http());
         let supports_erc165_call =
@@ -158,7 +169,7 @@ impl RpcProvider {
     /// identified by the XOR of the given `selectors`, **without** first
     /// verifying ERC-165 conformance.
     ///
-    /// Inspired by OpenZeppelin's
+    /// Inspired by `OpenZeppelin's`
     /// [`ERC165Checker.supportsERC165InterfaceUnchecked`](https://github.com/OpenZeppelin/openzeppelin-contracts/blob/5e28952cbdc0eb7d19ee62580ab31b30c2376e48/contracts/utils/introspection/ERC165Checker.sol#L107).
     ///
     /// # Errors
@@ -197,7 +208,7 @@ impl RpcProvider {
     ///
     /// Both steps run **concurrently** via [`tokio::join!`].
     ///
-    /// Inspired by OpenZeppelin's
+    /// Inspired by `OpenZeppelin's`
     /// [`ERC165Checker.supportsInterface`](https://github.com/OpenZeppelin/openzeppelin-contracts/blob/5e28952cbdc0eb7d19ee62580ab31b30c2376e48/contracts/utils/introspection/ERC165Checker.sol#L36).
     ///
     /// # Errors
@@ -215,18 +226,25 @@ impl RpcProvider {
             self.is_erc165_conform(address)
         );
 
-        Ok(supports_interface? && erc165_conform_check?)
+        let supports_interface = supports_interface?;
+        let erc165_conform_check = erc165_conform_check?;
+        Ok(supports_interface && erc165_conform_check)
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+
     use alloy::{sol, sol_types::SolCall};
 
-    use crate::web3::{
-        self,
-        erc165::{ERC165, ERC165ConfirmError},
-        tests::WithWallet,
+    use crate::{
+        Environment,
+        web3::{
+            self, RpcProviderBuilder, RpcProviderConfig,
+            erc165::{ERC165, ERC165ConfirmError},
+            tests::WithWallet,
+        },
     };
 
     // compiled with:
@@ -455,11 +473,109 @@ mod tests {
         );
         assert!(
             !support_interface_sol101.expect("Should be conform"),
-            "Should return false is it does not support interface"
+            "Should return false if it does not support interface"
         );
         assert!(
             !support_interface_sol101_unchecked.expect("Should be conform"),
-            "Should return false is it does not support interface"
+            "Should return false if it does not support interface"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_non_erc165_contract() {
+        let (_anvil, rpc_provider) = web3::tests::fixture(WithWallet::Yes).await;
+
+        let selector_address = *Selector::deploy(rpc_provider.http())
+            .await
+            .expect("Should be able to deploy with RPC provider")
+            .address();
+
+        let (is_erc165_conform, support_interface, support_interface_unchecked) = tokio::join!(
+            rpc_provider.is_erc165_conform(selector_address),
+            rpc_provider.erc165_supports_interface(
+                selector_address,
+                [ERC165::supportsInterfaceCall::SELECTOR]
+            ),
+            rpc_provider.erc165_supports_interface_unchecked(
+                selector_address,
+                [ERC165::supportsInterfaceCall::SELECTOR],
+            )
+        );
+        assert!(
+            !is_erc165_conform.expect("Should return Ok"),
+            "Non-ERC165 contract should return false for is_erc165_conform"
+        );
+        assert!(
+            !support_interface.expect("Should return Ok"),
+            "Non-ERC165 contract should return false for erc165_supports_interface"
+        );
+        assert!(
+            !support_interface_unchecked.expect("Should return Ok"),
+            "Non-ERC165 contract should return false for erc165_supports_interface_unchecked"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_transport_error() {
+        let (anvil, rpc_provider) = web3::tests::fixture(WithWallet::Yes).await;
+
+        let selector_address = *Selector::deploy(rpc_provider.http())
+            .await
+            .expect("Should be able to deploy with RPC provider")
+            .address();
+
+        let rpc_provider =
+            RpcProviderBuilder::with_config(&RpcProviderConfig::with_default_values(
+                vec![
+                    "http://localhost:1234"
+                        .parse()
+                        .expect("Should be valid URL"),
+                ],
+                anvil.ws_endpoint_url(),
+            ))
+            .environment(Environment::Dev)
+            // turn down retry policy as this will always fail
+            .retry_policy(web3::RetryPolicyConfig {
+                min_delay: Duration::from_secs(1),
+                max_delay: Duration::from_secs(1),
+                max_times: 1,
+            })
+            .chain_id(31_337)
+            .build()
+            .await
+            .expect("Should be able to spawn on local anvil");
+
+        let (is_erc165_conform, support_interface, support_interface_unchecked) = tokio::join!(
+            rpc_provider.is_erc165_conform(selector_address),
+            rpc_provider.erc165_supports_interface(
+                selector_address,
+                [ERC165::supportsInterfaceCall::SELECTOR]
+            ),
+            rpc_provider.erc165_supports_interface_unchecked(
+                selector_address,
+                [ERC165::supportsInterfaceCall::SELECTOR],
+            )
+        );
+        assert!(
+            matches!(
+                is_erc165_conform,
+                Err(ERC165ConfirmError::TransportError(_))
+            ),
+            "Should fail with TransportError"
+        );
+        assert!(
+            matches!(
+                support_interface,
+                Err(ERC165ConfirmError::TransportError(_))
+            ),
+            "Should fail with TransportError"
+        );
+        assert!(
+            matches!(
+                support_interface_unchecked,
+                Err(ERC165ConfirmError::TransportError(_))
+            ),
+            "Should fail with TransportError"
         );
     }
 }
