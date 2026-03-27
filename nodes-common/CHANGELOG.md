@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+## [0.4.4](https://github.com/TaceoLabs/nodes-helpers/compare/taceo-nodes-common-v0.4.3...taceo-nodes-common-v0.4.4)
+
+### ⛰️ Features
+
+
+- *(nodes-common)* Add ERC165 checks ([#22](https://github.com/TaceoLabs/nodes-helpers/pull/22)) - ([7cdfde5](https://github.com/TaceoLabs/nodes-helpers/commit/7cdfde51b779a99031407c07a824f915e6355c29))
+
+
 ## [0.4.3](https://github.com/TaceoLabs/nodes-helpers/compare/taceo-nodes-common-v0.4.2...taceo-nodes-common-v0.4.3)
 
 ### ⛰️ Features
