@@ -70,27 +70,25 @@ pub fn erc165_interface_selector(selectors: impl IntoIterator<Item = [u8; 4]>) -
     }))
 }
 
-/// Internal helper.
+/// Maps an alloy `supportsInterface` call result into a unit result.
 ///
-/// Maps an alloy contract call result into an [`ERC165ConfirmError`].
-///
-/// * `Ok(bool)` – passes through.
-/// * `ZeroData` error – treated as "address is not a deployed contract".
-/// * `TransportError` – propagated as-is.
-/// * Any other error – treated as the contract not supporting the interface
-///   (returns `Ok(false)`).
+/// * `Ok(true)` – the contract confirmed support → `Ok(())`.
+/// * `Ok(false)` – the contract denied support → `Err(Unsupported)`.
+/// * `ZeroData` error – the address has no deployed code → `Err(NotAContract)`.
+/// * `TransportError` – RPC transport failure → propagated as-is.
+/// * Any other error – treated as unsupported → `Err(Unsupported)`.
 fn unwrap_erc165_call(
     call: Result<bool, alloy::contract::Error>,
-) -> Result<bool, ERC165ConfirmError> {
+) -> Result<(), ERC165ConfirmError> {
     match call {
-        Ok(valid) => Ok(valid),
+        Ok(true) => Ok(()),
         Err(alloy::contract::Error::ZeroData(_, _)) => Err(ERC165ConfirmError::NotAContract),
         // There was an RPC transport error
         Err(alloy::contract::Error::TransportError(TransportError::Transport(transport_error))) => {
             Err(ERC165ConfirmError::TransportError(transport_error))
         }
         // every other error means it does not support the interface
-        Err(_) => Ok(false),
+        Ok(false) | Err(_) => Err(ERC165ConfirmError::Unsupported),
     }
 }
 
@@ -102,6 +100,9 @@ pub enum ERC165ConfirmError {
     /// (the call returned zero data).
     #[error("The requested address is not a deployed contract")]
     NotAContract,
+    /// The contract does not conform to the requested interface.
+    #[error("The contract does not support the requested interface")]
+    Unsupported,
     /// The contract claims to support the invalid interface identifier
     /// `0xffffffff`, which violates the EIP-165 specification.
     ///
@@ -132,6 +133,8 @@ impl RpcProvider {
     /// # Errors
     ///
     /// * [`ERC165ConfirmError::NotAContract`] – the address has no deployed code.
+    /// * [`ERC165ConfirmError::Unsupported`] – the contract does not support the
+    ///   ERC-165 `supportsInterface` selector.
     /// * [`ERC165ConfirmError::ConfirmsButAlsoToInvalidInterface`] – the contract
     ///   claims to support `0xffffffff`, violating the spec.
     /// * [`ERC165ConfirmError::TransportError`] – an RPC transport failure.
@@ -142,7 +145,7 @@ impl RpcProvider {
     /// the invalid interface `0xffffffff`. This implementation returns
     /// [`ERC165ConfirmError::ConfirmsButAlsoToInvalidInterface`] instead, allowing
     /// callers to distinguish spec-violating contracts from non-ERC-165 ones.
-    pub async fn is_erc165_conform(&self, address: Address) -> Result<bool, ERC165ConfirmError> {
+    pub async fn ensure_erc165_conform(&self, address: Address) -> Result<(), ERC165ConfirmError> {
         let maybe_erc165 = ERC165Instance::new(address, self.http());
         let supports_erc165_call =
             maybe_erc165.supportsInterface(FixedBytes::from(ERC_165_SUPPORTS_INTERFACE_SELECTOR));
@@ -153,15 +156,13 @@ impl RpcProvider {
             supports_invalid_interface_call.call()
         );
 
-        let supports_invalid = unwrap_erc165_call(supports_invalid)?;
-        let supports_erc165 = unwrap_erc165_call(supports_erc165)?;
+        let supports_invalid = unwrap_erc165_call(supports_invalid);
+        unwrap_erc165_call(supports_erc165)?;
 
-        if supports_erc165 && !supports_invalid {
-            Ok(true)
-        } else if supports_erc165 && supports_invalid {
-            Err(ERC165ConfirmError::ConfirmsButAlsoToInvalidInterface)
-        } else {
-            Ok(false)
+        match supports_invalid {
+            Ok(()) => Err(ERC165ConfirmError::ConfirmsButAlsoToInvalidInterface),
+            Err(ERC165ConfirmError::Unsupported) => Ok(()),
+            Err(err) => Err(err),
         }
     }
 
@@ -174,8 +175,9 @@ impl RpcProvider {
     ///
     /// # Errors
     ///
-    /// Returns [`ERC165ConfirmError`] on transport failures or if the target
-    /// address is not a deployed contract.
+    /// Returns [`ERC165ConfirmError`] if the contract does not support the
+    /// requested interface, on transport failures, or if the target address
+    /// is not a deployed contract.
     ///
     /// # Preconditions
     ///
@@ -187,7 +189,7 @@ impl RpcProvider {
         &self,
         address: Address,
         selectors: impl IntoIterator<Item = [u8; 4]>,
-    ) -> Result<bool, ERC165ConfirmError> {
+    ) -> Result<(), ERC165ConfirmError> {
         let erc165 = ERC165Instance::new(address, self.http());
         let supports_interface = erc165
             .supportsInterface(erc165_interface_selector(selectors))
@@ -213,22 +215,22 @@ impl RpcProvider {
     ///
     /// # Errors
     ///
-    /// Returns [`ERC165ConfirmError`] on transport failures, if the target
-    /// address is not a contract, or if the contract violates the EIP-165
-    /// spec.
+    /// Returns [`ERC165ConfirmError`] if the contract does not support the
+    /// requested interface, on transport failures, if the target address is
+    /// not a contract, or if the contract violates the EIP-165 spec.
     pub async fn erc165_supports_interface(
         &self,
         address: Address,
         selectors: impl IntoIterator<Item = [u8; 4]>,
-    ) -> Result<bool, ERC165ConfirmError> {
+    ) -> Result<(), ERC165ConfirmError> {
         let (supports_interface, erc165_conform_check) = tokio::join!(
             self.erc165_supports_interface_unchecked(address, selectors),
-            self.is_erc165_conform(address)
+            self.ensure_erc165_conform(address)
         );
 
-        let supports_interface = supports_interface?;
-        let erc165_conform_check = erc165_conform_check?;
-        Ok(supports_interface && erc165_conform_check)
+        supports_interface?;
+        erc165_conform_check?;
+        Ok(())
     }
 }
 
@@ -337,7 +339,7 @@ mod tests {
         let (support_interface, is_erc165_conform, support_interface_unchecked) = tokio::join!(
             rpc_provider
                 .erc165_supports_interface(zero_address, [ERC165::supportsInterfaceCall::SELECTOR]),
-            rpc_provider.is_erc165_conform(zero_address),
+            rpc_provider.ensure_erc165_conform(zero_address),
             rpc_provider.erc165_supports_interface_unchecked(
                 zero_address,
                 [ERC165::supportsInterfaceCall::SELECTOR],
@@ -386,7 +388,7 @@ mod tests {
                     Solidity101::helloCall::SELECTOR
                 ]
             ),
-            rpc_provider.is_erc165_conform(confirms_erc165_address),
+            rpc_provider.ensure_erc165_conform(confirms_erc165_address),
             rpc_provider.erc165_supports_interface_unchecked(
                 confirms_erc165_address,
                 [ERC165::supportsInterfaceCall::SELECTOR],
@@ -399,11 +401,11 @@ mod tests {
                 ],
             )
         );
-        assert!(support_interface_erc165.expect("Should be conform"));
-        assert!(support_interface_sol101.expect("Should be conform"));
-        assert!(is_erc165_conform.expect("Should be conform"));
-        assert!(support_interface_erc165_unchecked.expect("Should be conform"));
-        assert!(support_interface_sol101_unchecked.expect("Should be conform"));
+        support_interface_erc165.expect("Should be conform");
+        support_interface_sol101.expect("Should be conform");
+        is_erc165_conform.expect("Should be conform");
+        support_interface_erc165_unchecked.expect("Should be conform");
+        support_interface_sol101_unchecked.expect("Should be conform");
     }
 
     #[tokio::test]
@@ -419,7 +421,7 @@ mod tests {
                 confirms_erc165_address,
                 [ERC165::supportsInterfaceCall::SELECTOR]
             ),
-            rpc_provider.is_erc165_conform(confirms_erc165_address),
+            rpc_provider.ensure_erc165_conform(confirms_erc165_address),
             rpc_provider.erc165_supports_interface_unchecked(
                 confirms_erc165_address,
                 [ERC165::supportsInterfaceCall::SELECTOR],
@@ -439,9 +441,28 @@ mod tests {
             ),
             "Should fail with ConfirmsButAlsoToInvalidInterface"
         );
+
+        support_interface_erc165_unchecked.expect("Should work on unchecked call");
+
+        // Calling with a selector the contract does NOT support:
+        // erc165_supports_interface_unchecked returns Err(Unsupported)
+        // is_erc165_conform returns Err(ConfirmsButAlsoToInvalidInterface)
+        // The first ? propagates Unsupported.
+        let support_unsupported_interface = rpc_provider
+            .erc165_supports_interface(
+                confirms_erc165_address,
+                [
+                    Solidity101::worldCall::SELECTOR,
+                    Solidity101::helloCall::SELECTOR,
+                ],
+            )
+            .await;
         assert!(
-            support_interface_erc165_unchecked.expect("Should work on unchecked call"),
-            "Unchecked ERC165 should succeed if confirms to interface"
+            matches!(
+                support_unsupported_interface,
+                Err(ERC165ConfirmError::Unsupported)
+            ),
+            "Should fail with Unsupported even though contract also violates ERC-165 spec"
         );
     }
 
@@ -472,12 +493,18 @@ mod tests {
             )
         );
         assert!(
-            !support_interface_sol101.expect("Should be conform"),
-            "Should return false if it does not support interface"
+            matches!(
+                support_interface_sol101,
+                Err(ERC165ConfirmError::Unsupported)
+            ),
+            "Should fail with Unsupported"
         );
         assert!(
-            !support_interface_sol101_unchecked.expect("Should be conform"),
-            "Should return false if it does not support interface"
+            matches!(
+                support_interface_sol101_unchecked,
+                Err(ERC165ConfirmError::Unsupported)
+            ),
+            "Should fail with Unsupported"
         );
     }
 
@@ -491,7 +518,7 @@ mod tests {
             .address();
 
         let (is_erc165_conform, support_interface, support_interface_unchecked) = tokio::join!(
-            rpc_provider.is_erc165_conform(selector_address),
+            rpc_provider.ensure_erc165_conform(selector_address),
             rpc_provider.erc165_supports_interface(
                 selector_address,
                 [ERC165::supportsInterfaceCall::SELECTOR]
@@ -502,16 +529,19 @@ mod tests {
             )
         );
         assert!(
-            !is_erc165_conform.expect("Should return Ok"),
-            "Non-ERC165 contract should return false for is_erc165_conform"
+            matches!(is_erc165_conform, Err(ERC165ConfirmError::Unsupported)),
+            "Should fail with Unsupported"
         );
         assert!(
-            !support_interface.expect("Should return Ok"),
-            "Non-ERC165 contract should return false for erc165_supports_interface"
+            matches!(support_interface, Err(ERC165ConfirmError::Unsupported)),
+            "Should fail with Unsupported"
         );
         assert!(
-            !support_interface_unchecked.expect("Should return Ok"),
-            "Non-ERC165 contract should return false for erc165_supports_interface_unchecked"
+            matches!(
+                support_interface_unchecked,
+                Err(ERC165ConfirmError::Unsupported)
+            ),
+            "Should fail with Unsupported"
         );
     }
 
@@ -546,7 +576,7 @@ mod tests {
             .expect("Should be able to spawn on local anvil");
 
         let (is_erc165_conform, support_interface, support_interface_unchecked) = tokio::join!(
-            rpc_provider.is_erc165_conform(selector_address),
+            rpc_provider.ensure_erc165_conform(selector_address),
             rpc_provider.erc165_supports_interface(
                 selector_address,
                 [ERC165::supportsInterfaceCall::SELECTOR]
