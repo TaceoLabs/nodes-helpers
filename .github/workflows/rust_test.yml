@@ -24,5 +24,6 @@ jobs:
         with:
           toolchain: stable
       - uses: Swatinem/rust-cache@v2
+      - uses: foundry-rs/foundry-toolchain@v1
       - name: Unit & Integration Tests
         run: cargo test --workspace --profile ci-dev --all-features

@@ -51,6 +51,8 @@ use tower::{Layer, Service, ServiceBuilder};
 
 use crate::Environment;
 
+pub mod erc165;
+
 /// A wrapper around HTTP and WebSocket providers.
 ///
 /// The HTTP provider is intended for standard RPC calls and transaction
@@ -568,5 +570,41 @@ where
         } else {
             Ok(resp)
         }
+    }
+}
+
+#[cfg(test)]
+pub(crate) mod tests {
+    use alloy::node_bindings::{Anvil, AnvilInstance};
+
+    use crate::{
+        Environment,
+        web3::{RpcProvider, RpcProviderBuilder, RpcProviderConfig},
+    };
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub(crate) enum WithWallet {
+        Yes,
+        No,
+    }
+
+    pub(crate) async fn fixture(with_wallet: WithWallet) -> (AnvilInstance, RpcProvider) {
+        let anvil = Anvil::new().spawn();
+        let mut rpc_provider_builder =
+            RpcProviderBuilder::with_config(&RpcProviderConfig::with_default_values(
+                vec![anvil.endpoint_url()],
+                anvil.ws_endpoint_url(),
+            ))
+            .environment(Environment::Dev);
+        if with_wallet == WithWallet::Yes {
+            rpc_provider_builder =
+                rpc_provider_builder.wallet(anvil.wallet().expect("anvil should have a wallet"));
+        }
+        let rpc_provider = rpc_provider_builder
+            .chain_id(31_337)
+            .build()
+            .await
+            .expect("Should be able to spawn on local anvil");
+        (anvil, rpc_provider)
     }
 }

@@ -27,6 +27,7 @@ secrecy = "0.10"
 serde = { version = "1", default-features = false }
 sqlx = { version = "0.8", default-features = false }
 telemetry-batteries = "0.1.2"
+thiserror = "2"
 tokio = { version = "1" }
 tokio-util = "0.7"
 tower = { version = "0.5" }

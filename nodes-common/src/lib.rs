@@ -35,7 +35,7 @@
 //! * `serde` (enabled by default) – ser/de implementation for [`Environment`].
 //! * `aws` (enabled by default) – adds a method to create a localstack configuration used for testing.
 //! * `postgres` (enabled by default) – [`postgres::PostgresConfig`] and [`postgres::pg_pool_with_schema`] for creating a `sqlx` connection pool pinned to a schema, with configurable retry behaviour."
-//! * `alloy` (enabled by default) – [`web3::RpcProvider`], [`web3::RpcProviderBuilder`], and [`web3::RpcProviderConfig`] for building HTTP + WebSocket Ethereum RPC providers with automatic retry and failover."
+//! * `alloy` (enabled by default) – [`web3::RpcProvider`], [`web3::RpcProviderBuilder`], and [`web3::RpcProviderConfig`] for building HTTP + WebSocket Ethereum RPC providers with automatic retry and failover, plus ERC-165 interface detection utilities.
 
 use core::fmt;
 use std::sync::{
