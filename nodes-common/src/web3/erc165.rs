@@ -6,7 +6,7 @@
 //! The implementation is inspired by `OpenZeppelin's`
 //! [`ERC165Checker.sol`](https://github.com/OpenZeppelin/openzeppelin-contracts/blob/5e28952cbdc0eb7d19ee62580ab31b30c2376e48/contracts/utils/introspection/ERC165Checker.sol).
 //!
-//! * [`RpcProvider::is_erc165_conform`] – checks whether a contract correctly
+//! * [`RpcProvider::ensure_erc165_conform`] – checks whether a contract correctly
 //!   implements the ERC-165 `supportsInterface` function.
 //! * [`RpcProvider::erc165_supports_interface`] – checks ERC-165 conformance
 //!   **and** support for a specific interface in one call.
@@ -182,7 +182,7 @@ impl RpcProvider {
     /// # Preconditions
     ///
     /// Callers should verify ERC-165 conformance beforehand (see
-    /// [`RpcProvider::is_erc165_conform`]) or use
+    /// [`RpcProvider::ensure_erc165_conform`]) or use
     /// [`RpcProvider::erc165_supports_interface`] which performs that check
     /// automatically.
     pub async fn erc165_supports_interface_unchecked(
@@ -204,7 +204,7 @@ impl RpcProvider {
     /// This method performs the **full** ERC-165 verification:
     ///
     /// 1. Verifies the contract is ERC-165 conformant (via
-    ///    [`RpcProvider::is_erc165_conform`]).
+    ///    [`RpcProvider::ensure_erc165_conform`]).
     /// 2. Queries support for the requested interface (via
     ///    [`RpcProvider::erc165_supports_interface_unchecked`]).
     ///
