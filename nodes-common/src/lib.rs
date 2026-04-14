@@ -108,9 +108,7 @@ impl std::str::FromStr for Environment {
             "stage" | "staging" => Ok(Environment::Stage),
             "test" => Ok(Environment::Test),
             "dev" | "development" => Ok(Environment::Dev),
-            _ => Err(ParseEnvironmentError(format!(
-                "invalid environment '{s}'. expected one of: prod|production, stage|staging, test, dev|development"
-            ))),
+            _ => Err(ParseEnvironmentError(s.to_owned())),
         }
     }
 }
