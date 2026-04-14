@@ -96,7 +96,9 @@ impl fmt::Display for Environment {
 
 /// Error type for parsing an `Environment` from a string.
 #[derive(Debug, thiserror::Error)]
-#[error("failed to parse environment: {0}")]
+#[error(
+    "failed to parse environment '{0}'. expected one of: prod|production, stage|staging, test, dev|development"
+)]
 pub struct ParseEnvironmentError(String);
 
 impl std::str::FromStr for Environment {
