@@ -94,6 +94,27 @@ impl fmt::Display for Environment {
     }
 }
 
+/// Error type for parsing an `Environment` from a string.
+#[derive(Debug, thiserror::Error)]
+#[error("failed to parse environment: {0}")]
+pub struct ParseEnvironmentError(String);
+
+impl std::str::FromStr for Environment {
+    type Err = ParseEnvironmentError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "prod" | "production" => Ok(Environment::Prod),
+            "stage" | "staging" => Ok(Environment::Stage),
+            "test" => Ok(Environment::Test),
+            "dev" | "development" => Ok(Environment::Dev),
+            _ => Err(ParseEnvironmentError(format!(
+                "invalid environment '{s}'. expected one of: prod|production, stage|staging, test, dev|development"
+            ))),
+        }
+    }
+}
+
 impl Environment {
     /// Asserts that the environment is the dev environment.
     ///
