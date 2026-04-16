@@ -22,7 +22,7 @@ sqlx = { workspace = true, features = [
   "runtime-tokio",
   "tls-rustls-aws-lc-rs"
 ], optional = true }
-thiserror = { workspace = true, optional = true }
+thiserror = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt", "signal"] }
 tokio-util = { workspace = true }
 tower = { workspace = true, optional = true }
@@ -39,7 +39,6 @@ alloy = [
   "dep:backon",
   "dep:humantime-serde",
   "dep:serde",
-  "dep:thiserror",
   "dep:tower"
 ]
 api = ["dep:axum", "dep:tower-http"]
