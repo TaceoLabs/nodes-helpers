@@ -33,7 +33,6 @@
 //!
 //! * `api` (enabled by default) – exposes `/health` and `/version` Axum endpoints.
 //! * `serde` (enabled by default) – ser/de implementation for [`Environment`].
-//! * `aws` (enabled by default) – adds a method to create a localstack configuration used for testing.
 //! * `postgres` (enabled by default) – [`postgres::PostgresConfig`] and [`postgres::pg_pool_with_schema`] for creating a `sqlx` connection pool pinned to a schema, with configurable retry behaviour."
 //! * `alloy` (enabled by default) – [`web3::RpcProvider`], [`web3::RpcProviderBuilder`], and [`web3::RpcProviderConfig`] for building HTTP + WebSocket Ethereum RPC providers with automatic retry and failover, plus ERC-165 interface detection utilities.
 
@@ -249,28 +248,4 @@ pub async fn default_shutdown_signal() {
         () = ctrl_c => {},
         () = terminate => {},
     }
-}
-
-#[cfg(feature = "aws")]
-/// Creates an AWS SDK configuration for connecting to a `LocalStack` instance.
-///
-/// This function is designed to facilitate testing and development by configuring
-/// an AWS SDK client to connect to a `LocalStack` instance. It sets the region to
-/// `us-east-1` and uses static test credentials. The endpoint URL can be customized
-/// via the `TEST_AWS_ENDPOINT_URL` environment variable; if not set, it defaults
-/// to `http://localhost:4566`.
-pub async fn localstack_aws_config() -> aws_config::SdkConfig {
-    use aws_config::Region;
-    use aws_sdk_secretsmanager::config::Credentials;
-    let region_provider = Region::new("us-east-1");
-    let credentials = Credentials::new("test", "test", None, None, "Static");
-    // in case we don't want the standard url, we can configure it via the environment
-    aws_config::from_env()
-        .region(region_provider)
-        .endpoint_url(
-            std::env::var("TEST_AWS_ENDPOINT_URL").unwrap_or("http://localhost:4566".to_string()),
-        )
-        .credentials_provider(credentials)
-        .load()
-        .await
 }

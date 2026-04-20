@@ -11,8 +11,6 @@ publish = true
 
 [dependencies]
 alloy = { workspace = true, features = ["full", "json-rpc"], optional = true }
-aws-config = { workspace = true, features = ["behavior-version-latest"], optional = true }
-aws-sdk-secretsmanager = { workspace = true, optional = true }
 axum = { workspace = true, optional = true }
 backon = { workspace = true, features = ["std", "tokio-sleep"], optional = true }
 git-version = { workspace = true }
@@ -35,7 +33,7 @@ tracing.workspace = true
 alloy = { workspace = true, features = ["full", "json-rpc", "node-bindings"] }
 
 [features]
-default = ["alloy", "api", "aws", "postgres", "serde"]
+default = ["alloy", "api", "postgres", "serde"]
 alloy = [
   "dep:alloy",
   "dep:backon",
@@ -45,7 +43,6 @@ alloy = [
   "dep:tower"
 ]
 api = ["dep:axum", "dep:tower-http"]
-aws = ["dep:aws-config", "dep:aws-sdk-secretsmanager"]
 postgres = [
   "dep:backon",
   "dep:humantime-serde",

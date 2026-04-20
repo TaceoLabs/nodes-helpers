@@ -12,7 +12,6 @@ Collection of common functions used by nodes in our MPC networks.
 |---------|---------|-------------|
 | `alloy` | ✅ | Ethereum RPC provider via Alloy, ERC-165 interface detection |
 | `api` | ✅ | Health and version endpoints via Axum |
-| `aws` | ✅ | AWS Secrets Manager integration |
 | `postgres` | ✅ | PostgreSQL connection pool via SQLx |
 | `serde` | ✅ | Serde support |
 
