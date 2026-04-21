@@ -8,24 +8,27 @@
 //!
 //! # Usage
 //!
-//! For most use cases, call [`RpcProvider::erc165_supports_interface_unchecked`]
-//! directly. It queries whether the target contract reports support for the given
-//! interface and returns `Ok(())` or `Err(`[`ERC165ConfirmError::Unsupported`]`)`.
-//! It does **not** enforce that the contract is ERC-165 compliant — if you only
-//! care that the interface is supported, this is the right method to use.
+//! For most use cases, call
+//! [`HttpRpcProvider::erc165_supports_interface_unchecked`] directly. It queries
+//! whether the target contract reports support for the given interface and
+//! returns `Ok(())` or `Err(`[`ERC165ConfirmError::Unsupported`]`)`. It does
+//! **not** enforce that the contract is ERC-165 compliant — if you only care
+//! that the interface is supported, this is the right method to use.
 //!
-//! Use [`RpcProvider::erc165_supports_interface`] when you also need to enforce
-//! strict ERC-165 compliance — i.e., the contract must not claim to support the
-//! invalid interface `0xffffffff`. Both checks run concurrently.
+//! Use [`HttpRpcProvider::erc165_supports_interface`] when you also need to
+//! enforce strict ERC-165 compliance — i.e., the contract must not claim to
+//! support the invalid interface `0xffffffff`. Both checks run concurrently.
 //!
-//! Use [`RpcProvider::ensure_erc165_conform`] to verify ERC-165 compliance
+//! Use [`HttpRpcProvider::ensure_erc165_conform`] to verify ERC-165 compliance
 //! independently of a specific interface query.
 //!
-//! * [`RpcProvider::erc165_supports_interface_unchecked`] – queries interface
-//!   support without enforcing ERC-165 compliance. Preferred for most callers.
-//! * [`RpcProvider::erc165_supports_interface`] – checks interface support
+//! * [`HttpRpcProvider::erc165_supports_interface_unchecked`] – queries
+//!   interface support without enforcing ERC-165 compliance. Preferred for most
+//!   callers.
+//! * [`HttpRpcProvider::erc165_supports_interface`] – checks interface support
 //!   **and** strict ERC-165 compliance concurrently.
-//! * [`RpcProvider::ensure_erc165_conform`] – verifies ERC-165 compliance only.
+//! * [`HttpRpcProvider::ensure_erc165_conform`] – verifies ERC-165 compliance
+//!   only.
 //! * [`erc165_interface_selector`] – computes the ERC-165 interface identifier
 //!   by XOR-ing the given function selectors.
 
@@ -35,7 +38,7 @@ use alloy::{
     transports::{TransportError, TransportErrorKind},
 };
 
-use crate::web3::{RpcProvider, erc165::ERC165::ERC165Instance};
+use crate::web3::{HttpRpcProvider, erc165::ERC165::ERC165Instance};
 
 sol!(
     #[allow(clippy::exhaustive_structs, reason="comes from sol macro")]
@@ -122,7 +125,7 @@ pub enum ERC165ConfirmError {
     TransportError(#[from] TransportErrorKind),
 }
 
-impl RpcProvider {
+impl HttpRpcProvider {
     /// Checks whether the contract at `address` correctly implements ERC-165.
     ///
     /// The check follows the procedure defined in
@@ -144,7 +147,7 @@ impl RpcProvider {
     ///   or it incorrectly claims to support the invalid interface `0xffffffff`.
     /// * [`ERC165ConfirmError::TransportError`] – an RPC transport failure.
     pub async fn ensure_erc165_conform(&self, address: Address) -> Result<(), ERC165ConfirmError> {
-        let maybe_erc165 = ERC165Instance::new(address, self.http());
+        let maybe_erc165 = ERC165Instance::new(address, self.inner());
         let supports_erc165_call =
             maybe_erc165.supportsInterface(FixedBytes::from(ERC_165_SUPPORTS_INTERFACE_SELECTOR));
         let supports_invalid_interface_call =
@@ -180,14 +183,14 @@ impl RpcProvider {
     /// # Note
     ///
     /// This method does not verify strict ERC-165 compliance. Use
-    /// [`RpcProvider::erc165_supports_interface`] if you also want to ensure
+    /// [`HttpRpcProvider::erc165_supports_interface`] if you also want to ensure
     /// the contract does not claim to support the invalid interface `0xffffffff`.
     pub async fn erc165_supports_interface_unchecked(
         &self,
         address: Address,
         selectors: impl IntoIterator<Item = [u8; 4]>,
     ) -> Result<(), ERC165ConfirmError> {
-        let erc165 = ERC165Instance::new(address, self.http());
+        let erc165 = ERC165Instance::new(address, self.inner());
         let supports_interface = erc165
             .supportsInterface(erc165_interface_selector(selectors))
             .call()
@@ -201,9 +204,9 @@ impl RpcProvider {
     /// This method performs the **full** ERC-165 verification:
     ///
     /// 1. Verifies the contract is ERC-165 conformant (via
-    ///    [`RpcProvider::ensure_erc165_conform`]).
+    ///    [`HttpRpcProvider::ensure_erc165_conform`]).
     /// 2. Queries support for the requested interface (via
-    ///    [`RpcProvider::erc165_supports_interface_unchecked`]).
+    ///    [`HttpRpcProvider::erc165_supports_interface_unchecked`]).
     ///
     /// Both steps run **concurrently** via [`tokio::join!`].
     ///
@@ -240,7 +243,7 @@ mod tests {
     use crate::{
         Environment,
         web3::{
-            self, RpcProviderBuilder, RpcProviderConfig,
+            self, HttpRpcProviderBuilder, HttpRpcProviderConfig,
             erc165::{ERC165, ERC165ConfirmError},
             tests::WithWallet,
         },
@@ -291,8 +294,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_selector_hash_contract() {
-        let (_anvil, rpc_provider) = web3::tests::fixture(WithWallet::Yes).await;
-        let selector = Selector::deploy(rpc_provider.http())
+        let (_anvil, http_rpc_provider) = web3::tests::http_fixture(WithWallet::Yes);
+        let selector = Selector::deploy(http_rpc_provider.inner())
             .await
             .expect("Should be able to deploy with RPC provider");
         let should_selector = selector
@@ -329,15 +332,15 @@ mod tests {
 
     #[tokio::test]
     async fn test_not_deployed_contract() {
-        let (_anvil, rpc_provider) = web3::tests::fixture(WithWallet::No).await;
+        let (_anvil, http_rpc_provider) = web3::tests::http_fixture(WithWallet::No);
 
         let zero_address =
             alloy::primitives::address!("0x0000000000000000000000000000000000000000");
         let (support_interface, is_erc165_conform, support_interface_unchecked) = tokio::join!(
-            rpc_provider
+            http_rpc_provider
                 .erc165_supports_interface(zero_address, [ERC165::supportsInterfaceCall::SELECTOR]),
-            rpc_provider.ensure_erc165_conform(zero_address),
-            rpc_provider.erc165_supports_interface_unchecked(
+            http_rpc_provider.ensure_erc165_conform(zero_address),
+            http_rpc_provider.erc165_supports_interface_unchecked(
                 zero_address,
                 [ERC165::supportsInterfaceCall::SELECTOR],
             )
@@ -361,9 +364,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_erc165_confirm() {
-        let (_anvil, rpc_provider) = web3::tests::fixture(WithWallet::Yes).await;
+        let (_anvil, http_rpc_provider) = web3::tests::http_fixture(WithWallet::Yes);
 
-        let confirms_erc165_address = *ConfirmsERC165::deploy(rpc_provider.http())
+        let confirms_erc165_address = *ConfirmsERC165::deploy(http_rpc_provider.inner())
             .await
             .expect("Should be able to deploy with RPC provider")
             .address();
@@ -374,23 +377,23 @@ mod tests {
             support_interface_erc165_unchecked,
             support_interface_sol101_unchecked,
         ) = tokio::join!(
-            rpc_provider.erc165_supports_interface(
+            http_rpc_provider.erc165_supports_interface(
                 confirms_erc165_address,
                 [ERC165::supportsInterfaceCall::SELECTOR]
             ),
-            rpc_provider.erc165_supports_interface(
+            http_rpc_provider.erc165_supports_interface(
                 confirms_erc165_address,
                 [
                     Solidity101::worldCall::SELECTOR,
                     Solidity101::helloCall::SELECTOR
                 ]
             ),
-            rpc_provider.ensure_erc165_conform(confirms_erc165_address),
-            rpc_provider.erc165_supports_interface_unchecked(
+            http_rpc_provider.ensure_erc165_conform(confirms_erc165_address),
+            http_rpc_provider.erc165_supports_interface_unchecked(
                 confirms_erc165_address,
                 [ERC165::supportsInterfaceCall::SELECTOR],
             ),
-            rpc_provider.erc165_supports_interface_unchecked(
+            http_rpc_provider.erc165_supports_interface_unchecked(
                 confirms_erc165_address,
                 [
                     Solidity101::worldCall::SELECTOR,
@@ -407,19 +410,19 @@ mod tests {
 
     #[tokio::test]
     async fn test_erc165_confirm_invalid_interface() {
-        let (_anvil, rpc_provider) = web3::tests::fixture(WithWallet::Yes).await;
+        let (_anvil, http_rpc_provider) = web3::tests::http_fixture(WithWallet::Yes);
 
-        let confirms_erc165_address = *ConfirmsInvalidInterface::deploy(rpc_provider.http())
+        let confirms_erc165_address = *ConfirmsInvalidInterface::deploy(http_rpc_provider.inner())
             .await
             .expect("Should be able to deploy with RPC provider")
             .address();
         let (support_interface_erc165, is_erc165_conform, support_interface_erc165_unchecked) = tokio::join!(
-            rpc_provider.erc165_supports_interface(
+            http_rpc_provider.erc165_supports_interface(
                 confirms_erc165_address,
                 [ERC165::supportsInterfaceCall::SELECTOR]
             ),
-            rpc_provider.ensure_erc165_conform(confirms_erc165_address),
-            rpc_provider.erc165_supports_interface_unchecked(
+            http_rpc_provider.ensure_erc165_conform(confirms_erc165_address),
+            http_rpc_provider.erc165_supports_interface_unchecked(
                 confirms_erc165_address,
                 [ERC165::supportsInterfaceCall::SELECTOR],
             ),
@@ -442,7 +445,7 @@ mod tests {
         // erc165_supports_interface_unchecked returns Err(Unsupported)
         // ensure_erc165_conform returns Err(Unsupported) (0xffffffff violation)
         // The first ? propagates Unsupported.
-        let support_unsupported_interface = rpc_provider
+        let support_unsupported_interface = http_rpc_provider
             .erc165_supports_interface(
                 confirms_erc165_address,
                 [
@@ -462,14 +465,14 @@ mod tests {
 
     #[tokio::test]
     async fn test_erc165_confirm_but_does_not_support_interface() {
-        let (_anvil, rpc_provider) = web3::tests::fixture(WithWallet::Yes).await;
+        let (_anvil, http_rpc_provider) = web3::tests::http_fixture(WithWallet::Yes);
 
-        let confirms_erc165_address = *ConfirmsERC165::deploy(rpc_provider.http())
+        let confirms_erc165_address = *ConfirmsERC165::deploy(http_rpc_provider.inner())
             .await
             .expect("Should be able to deploy with RPC provider")
             .address();
         let (support_interface_sol101, support_interface_sol101_unchecked) = tokio::join!(
-            rpc_provider.erc165_supports_interface(
+            http_rpc_provider.erc165_supports_interface(
                 confirms_erc165_address,
                 [
                     Solidity101::worldCall::SELECTOR,
@@ -477,7 +480,7 @@ mod tests {
                     Solidity101::helloCall::SELECTOR
                 ]
             ),
-            rpc_provider.erc165_supports_interface_unchecked(
+            http_rpc_provider.erc165_supports_interface_unchecked(
                 confirms_erc165_address,
                 [
                     Solidity101::worldCall::SELECTOR,
@@ -504,20 +507,20 @@ mod tests {
 
     #[tokio::test]
     async fn test_non_erc165_contract() {
-        let (_anvil, rpc_provider) = web3::tests::fixture(WithWallet::Yes).await;
+        let (_anvil, http_rpc_provider) = web3::tests::http_fixture(WithWallet::Yes);
 
-        let selector_address = *Selector::deploy(rpc_provider.http())
+        let selector_address = *Selector::deploy(http_rpc_provider.inner())
             .await
             .expect("Should be able to deploy with RPC provider")
             .address();
 
         let (is_erc165_conform, support_interface, support_interface_unchecked) = tokio::join!(
-            rpc_provider.ensure_erc165_conform(selector_address),
-            rpc_provider.erc165_supports_interface(
+            http_rpc_provider.ensure_erc165_conform(selector_address),
+            http_rpc_provider.erc165_supports_interface(
                 selector_address,
                 [ERC165::supportsInterfaceCall::SELECTOR]
             ),
-            rpc_provider.erc165_supports_interface_unchecked(
+            http_rpc_provider.erc165_supports_interface_unchecked(
                 selector_address,
                 [ERC165::supportsInterfaceCall::SELECTOR],
             )
@@ -541,22 +544,19 @@ mod tests {
 
     #[tokio::test]
     async fn test_transport_error() {
-        let (anvil, rpc_provider) = web3::tests::fixture(WithWallet::Yes).await;
+        let (_anvil, http_rpc_provider) = web3::tests::http_fixture(WithWallet::Yes);
 
-        let selector_address = *Selector::deploy(rpc_provider.http())
+        let selector_address = *Selector::deploy(http_rpc_provider.inner())
             .await
             .expect("Should be able to deploy with RPC provider")
             .address();
 
-        let rpc_provider =
-            RpcProviderBuilder::with_config(&RpcProviderConfig::with_default_values(
-                vec![
-                    "http://localhost:1234"
-                        .parse()
-                        .expect("Should be valid URL"),
-                ],
-                anvil.ws_endpoint_url(),
-            ))
+        let http_rpc_provider =
+            HttpRpcProviderBuilder::with_config(&HttpRpcProviderConfig::with_default_values(vec![
+                "http://localhost:1234"
+                    .parse()
+                    .expect("Should be valid URL"),
+            ]))
             .environment(Environment::Dev)
             // turn down retry policy as this will always fail
             .retry_policy(web3::RetryPolicyConfig {
@@ -566,16 +566,15 @@ mod tests {
             })
             .chain_id(31_337)
             .build()
-            .await
-            .expect("Should be able to spawn on local anvil");
+            .expect("Should be able to configure HTTP provider");
 
         let (is_erc165_conform, support_interface, support_interface_unchecked) = tokio::join!(
-            rpc_provider.ensure_erc165_conform(selector_address),
-            rpc_provider.erc165_supports_interface(
+            http_rpc_provider.ensure_erc165_conform(selector_address),
+            http_rpc_provider.erc165_supports_interface(
                 selector_address,
                 [ERC165::supportsInterfaceCall::SELECTOR]
             ),
-            rpc_provider.erc165_supports_interface_unchecked(
+            http_rpc_provider.erc165_supports_interface_unchecked(
                 selector_address,
                 [ERC165::supportsInterfaceCall::SELECTOR],
             )

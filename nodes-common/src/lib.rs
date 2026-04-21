@@ -34,7 +34,10 @@
 //! * `api` (enabled by default) – exposes `/health` and `/version` Axum endpoints.
 //! * `serde` (enabled by default) – ser/de implementation for [`Environment`].
 //! * `postgres` (enabled by default) – [`postgres::PostgresConfig`] and [`postgres::pg_pool_with_schema`] for creating a `sqlx` connection pool pinned to a schema, with configurable retry behaviour."
-//! * `alloy` (enabled by default) – [`web3::RpcProvider`], [`web3::RpcProviderBuilder`], and [`web3::RpcProviderConfig`] for building HTTP + WebSocket Ethereum RPC providers with automatic retry and failover, plus ERC-165 interface detection utilities.
+//! * `web3` (enabled by default) – [`web3::HttpRpcProvider`],
+//!   [`web3::HttpRpcProviderBuilder`], and [`web3::HttpRpcProviderConfig`]
+//!   for building HTTP Ethereum RPC providers with automatic retry and
+//!   failover, plus ERC-165 interface detection utilities.
 
 use core::fmt;
 use std::sync::{
@@ -54,7 +57,7 @@ pub use git_version;
 pub mod api;
 #[cfg(feature = "postgres")]
 pub mod postgres;
-#[cfg(feature = "alloy")]
+#[cfg(feature = "web3")]
 pub mod web3;
 
 /// The environment the service is running in.

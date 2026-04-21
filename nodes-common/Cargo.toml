@@ -10,7 +10,12 @@ license.workspace = true
 publish = true
 
 [dependencies]
-alloy = { workspace = true, features = ["full", "json-rpc"], optional = true }
+alloy = { workspace = true, features = [
+  "contract",
+  "json-rpc",
+  "reqwest-rustls-tls",
+  "std"
+], optional = true }
 axum = { workspace = true, optional = true }
 backon = { workspace = true, features = ["std", "tokio-sleep"], optional = true }
 git-version = { workspace = true }
@@ -30,17 +35,18 @@ tower-http = { workspace = true, features = ["set-header"], optional = true }
 tracing.workspace = true
 
 [dev-dependencies]
-alloy = { workspace = true, features = ["full", "json-rpc", "node-bindings"] }
+alloy = { workspace = true, features = [
+  "contract",
+  "json-rpc",
+  "node-bindings",
+  "reqwest-rustls-tls",
+  "std"
+] }
+axum = { workspace = true }
+http-body = "1"
 
 [features]
-default = ["alloy", "api", "postgres", "serde"]
-alloy = [
-  "dep:alloy",
-  "dep:backon",
-  "dep:humantime-serde",
-  "dep:serde",
-  "dep:tower"
-]
+default = ["api", "postgres", "serde", "web3"]
 api = ["dep:axum", "dep:tower-http"]
 postgres = [
   "dep:backon",
@@ -50,3 +56,10 @@ postgres = [
   "dep:sqlx"
 ]
 serde = ["dep:serde"]
+web3 = [
+  "dep:alloy",
+  "dep:backon",
+  "dep:humantime-serde",
+  "dep:serde",
+  "dep:tower"
+]

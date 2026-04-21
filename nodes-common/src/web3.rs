@@ -1,29 +1,17 @@
-//! RPC provider utilities for interacting with Ethereum nodes.
+//! HTTP RPC provider utilities for interacting with Ethereum nodes.
 //!
-//! This module provides a configurable RPC provider built on top of
+//! This module provides configurable HTTP RPC providers built on top of
 //! [`alloy`] transports. It supports:
 //!
 //! - HTTP RPC with automatic retry and exponential backoff
 //! - Multiple HTTP endpoints with automatic failover
-//! - WebSocket RPC for subscriptions
 //! - Optional wallet integration for transaction signing
 //!
-//! The [`RpcProviderBuilder`] constructs a [`RpcProvider`] using the provided
-//! [`RpcProviderConfig`]. HTTP transports are wrapped with retry and fallback
-//! layers to improve reliability when interacting with RPC endpoints.
-//!
-//! ⚠️ **Attention**
-//!
-//! The WebSocket RPC connection should **only be used for subscriptions**
-//! (e.g. `eth_subscribe`). The underlying [`alloy`] WebSocket client
-//! maintains a heartbeat to keep the connection alive.
-//!
-//! Using the WebSocket provider for normal RPC requests may lead to
-//! **increased infrastructure costs**, as some RPC providers meter
-//! WebSocket traffic differently from HTTP requests.
+//! Use [`HttpRpcProviderBuilder`] to build an HTTP RPC provider.
+//! HTTP transports are wrapped with retry and fallback layers to improve
+//! reliability when interacting with RPC endpoints.
 use std::{
     num::NonZeroUsize,
-    pin::Pin,
     task::{Context, Poll},
     time::Duration,
 };
@@ -32,12 +20,15 @@ use alloy::{
     network::EthereumWallet,
     primitives::ChainId,
     providers::{
-        DynProvider, Provider, ProviderBuilder, WsConnect,
+        DynProvider, Provider, ProviderBuilder,
         fillers::{BlobGasFiller, ChainIdFiller},
     },
-    rpc::{client::RpcClient, json_rpc::RequestPacket},
+    rpc::{
+        client::RpcClient,
+        json_rpc::{RequestPacket, ResponsePacket},
+    },
     transports::{
-        RpcError, TransportError, TransportErrorKind,
+        RpcError, Transport, TransportError, TransportErrorKind, TransportFut,
         http::{
             Http,
             reqwest::{self, Url},
@@ -47,48 +38,30 @@ use alloy::{
 };
 use backon::{ExponentialBuilder, Retryable as _};
 use serde::Deserialize;
-use tower::{Layer, Service, ServiceBuilder};
+use tower::{Layer, Service};
 
 use crate::Environment;
 
 pub mod erc165;
 
-/// A wrapper around HTTP and WebSocket providers.
+/// A dedicated HTTP RPC provider.
 ///
-/// The HTTP provider is intended for standard RPC calls and transaction
-/// submission, while the WebSocket provider is primarily used for
-/// subscriptions and event streams.
-///
-/// ⚠️ **Attention**
-///
-/// The WebSocket provider should **only be used for subscriptions**
-/// (e.g. `eth_subscribe`). Alloy maintains an internal heartbeat on
-/// WebSocket connections to keep them alive. Using `WebSockets` for
-/// ordinary RPC calls may lead to **increased RPC provider costs**.
-///
-/// For regular RPC requests prefer [`RpcProvider::http`].
+/// This provider should be used for regular RPC calls, transaction
+/// submission, and helpers such as ERC-165 queries.
 #[derive(Clone)]
-pub struct RpcProvider {
-    http_provider: DynProvider,
-    ws_provider: DynProvider,
-}
+pub struct HttpRpcProvider(DynProvider);
 
-/// Configuration for building an [`RpcProvider`].
+/// Configuration for building an [`HttpRpcProvider`].
 ///
-/// The configuration specifies the HTTP RPC endpoints used for requests
-/// as well as the WebSocket endpoint used for subscriptions. Multiple
-/// HTTP endpoints can be provided to enable automatic failover.
-///
+/// Multiple HTTP endpoints can be provided to enable automatic failover.
 /// Retry behavior can be tuned via [`RetryPolicyConfig`].
 #[derive(Debug, Clone, Deserialize)]
 #[non_exhaustive]
-pub struct RpcProviderConfig {
+pub struct HttpRpcProviderConfig {
     /// List of HTTP RPC endpoints used for requests.
     ///
     /// Uses alloy's [`FallbackService`](https://docs.rs/alloy/latest/alloy/providers/transport/layers/struct.FallbackLayer.html) and configures each endpoint as one potential transport.
     pub http_urls: Vec<Url>,
-    /// WebSocket RPC endpoint used for subscriptions.
-    pub ws_url: Url,
     /// Optional chain ID used by the provider.
     ///
     /// If provided, the [`ChainIdFiller`] will automatically populate
@@ -98,12 +71,13 @@ pub struct RpcProviderConfig {
     /// The timeout for HTTP requests to the RPC.
     ///
     /// Defaults to **10 seconds**.
-    #[serde(default = "RpcProviderConfig::default_timeout")]
+    #[serde(default = "HttpRpcProviderConfig::default_timeout")]
     #[serde(with = "humantime_serde")]
     pub timeout: Duration,
     /// The poll interval for the confirmation heartbeat for alloy.
     ///
-    /// Uses the alloys default setting if omitted. For `dev` environment 250ms and for all other environments 7s.
+    /// Uses alloy's default setting if omitted. For `dev` environment 250ms
+    /// and for all other environments 7s.
     #[serde(default)]
     #[serde(with = "humantime_serde")]
     pub confirmations_poll_interval: Option<Duration>,
@@ -140,13 +114,12 @@ pub struct RetryPolicyConfig {
     pub max_times: usize,
 }
 
-impl RpcProviderConfig {
+impl HttpRpcProviderConfig {
     /// Creates a new configuration using default retry settings.
     #[must_use]
-    pub fn with_default_values(http_urls: Vec<Url>, ws_url: Url) -> Self {
+    pub fn with_default_values(http_urls: Vec<Url>) -> Self {
         Self {
             http_urls,
-            ws_url,
             timeout: Self::default_timeout(),
             confirmations_poll_interval: None,
             chain_id: None,
@@ -192,14 +165,59 @@ impl Default for RetryPolicyConfig {
     }
 }
 
-/// Builder for constructing an [`RpcProvider`].
+fn build_transport_stack<S>(
+    transports: Vec<S>,
+    retry_policy_config: &RetryPolicyConfig,
+) -> impl Transport + Clone
+where
+    S: Service<RequestPacket, Response = ResponsePacket, Error = TransportError>
+        + Clone
+        + Send
+        + Sync
+        + 'static,
+    S::Future: Send,
+{
+    let retry_layer = RetryLayer::new(http_retry_policy(), retry_policy_config);
+    let retrying_transports = transports
+        .into_iter()
+        .map(|transport| retry_layer.layer(transport))
+        .collect::<Vec<_>>();
+    let transport_count =
+        NonZeroUsize::new(retrying_transports.len()).expect("transport stack must not be empty");
+
+    // Retry each transport before fallback so JSON-RPC error responses cannot
+    // win the fallback race against a slower healthy endpoint.
+    FallbackLayer::default()
+        .with_active_transport_count(transport_count)
+        .layer(retrying_transports)
+}
+
+fn http_retry_policy() -> OrRetryPolicyFn {
+    // Configure retry policy.
+    //
+    // The RateLimitRetryPolicy already handles 503 Service Unavailable and other common RPC errors.
+    // We additionally check for other common transient errors:
+    //   - 408 Request Timeout
+    //   - 502 Bad Gateway
+    //   - 504 Gateway Timeout
+    RateLimitRetryPolicy::default().or(|error: &TransportError| match error {
+        RpcError::Transport(TransportErrorKind::HttpError(e)) => {
+            matches!(e.status, 408 | 502 | 504)
+        }
+        RpcError::Transport(kind) => kind
+            .as_custom()
+            .and_then(|error| error.downcast_ref::<reqwest::Error>())
+            .is_some_and(reqwest::Error::is_timeout),
+        _ => false,
+    })
+}
+
+/// Builder for constructing an [`HttpRpcProvider`].
 ///
 /// The builder configures retry behavior, fallback transports, optional
-/// wallet integration, and provider fillers before establishing
-/// connections to the RPC endpoints.
-pub struct RpcProviderBuilder {
+/// wallet integration, and provider fillers before creating the provider.
+pub struct HttpRpcProviderBuilder {
     http_urls: Vec<Url>,
-    ws_rpc_url: Url,
     retry_policy_config: RetryPolicyConfig,
     chain_id: Option<ChainId>,
     timeout: Duration,
@@ -208,34 +226,30 @@ pub struct RpcProviderBuilder {
     wallet: Option<EthereumWallet>,
 }
 
-impl From<RpcProviderConfig> for RpcProviderBuilder {
-    fn from(value: RpcProviderConfig) -> Self {
+impl From<HttpRpcProviderConfig> for HttpRpcProviderBuilder {
+    fn from(value: HttpRpcProviderConfig) -> Self {
         Self::from(&value)
     }
 }
 
-impl From<&RpcProviderConfig> for RpcProviderBuilder {
-    fn from(value: &RpcProviderConfig) -> Self {
+impl From<&HttpRpcProviderConfig> for HttpRpcProviderBuilder {
+    fn from(value: &HttpRpcProviderConfig) -> Self {
         Self::with_config(value)
     }
 }
 
-impl RpcProviderBuilder {
+impl HttpRpcProviderBuilder {
     /// Creates a new builder from the given configuration.
-    ///
-    /// This only stores the configuration. All transport, retry, and
-    /// fallback logic is constructed during [`Self::build`].
     ///
     /// # Panics
     ///
     /// Panics if `config.http_urls` is empty. At least one HTTP endpoint
     /// must be provided so that a transport stack can be constructed.
     #[must_use]
-    pub fn with_config(config: &RpcProviderConfig) -> Self {
+    pub fn with_config(config: &HttpRpcProviderConfig) -> Self {
         assert!(!config.http_urls.is_empty(), "http URLs must not be empty");
         Self {
             http_urls: config.http_urls.clone(),
-            ws_rpc_url: config.ws_url.clone(),
             retry_policy_config: config.retry_policy_config.clone(),
             timeout: config.timeout,
             chain_id: config.chain_id,
@@ -245,47 +259,24 @@ impl RpcProviderBuilder {
         }
     }
 
-    /// Creates a new builder using default retry settings from the configuration.
-    ///
-    /// # Arguments
-    ///
-    /// * `http_urls` - A vector of HTTP RPC endpoint URLs. These endpoints will be
-    ///   used with automatic failover via a fallback layer.
-    /// * `ws_url` - A WebSocket RPC endpoint used for subscriptions only.
-    ///
-    /// # Behavior
-    ///
-    /// This function:
-    /// - Creates a `RpcProviderConfig` with the provided URLs.
-    /// - Applies default values for the retry policy (`min_delay = 1s`, `max_delay = 8s`, `max_times = 5`).
-    /// - Initializes the builder with the default configuration.
-    ///
-    /// # Notes
-    ///
-    /// ⚠️ The `ws_url` should **only** be used for subscriptions.
+    /// Creates a new builder using default retry settings.
     ///
     /// # Example
     ///
     /// ```
     /// use alloy::transports::http::reqwest::Url;
-    /// use taceo_nodes_common::web3::RpcProviderBuilder;
+    /// use taceo_nodes_common::web3::HttpRpcProviderBuilder;
     ///
-    /// let builder = RpcProviderBuilder::with_default_values(
-    ///     vec![
-    ///         Url::parse("http://127.0.0.1:8545").unwrap()
-    ///     ],
-    ///     Url::parse("ws://127.0.0.1:8546").unwrap(),
-    /// );
+    /// let builder = HttpRpcProviderBuilder::with_default_values(vec![
+    ///     Url::parse("http://127.0.0.1:8545").unwrap(),
+    /// ]);
     /// ```
     #[must_use]
-    pub fn with_default_values(http_urls: Vec<Url>, ws_url: Url) -> Self {
-        Self::with_config(&RpcProviderConfig::with_default_values(http_urls, ws_url))
+    pub fn with_default_values(http_urls: Vec<Url>) -> Self {
+        Self::with_config(&HttpRpcProviderConfig::with_default_values(http_urls))
     }
 
     /// Configures the environment used by the provider.
-    ///
-    /// When running in a development environment, the provider enables
-    /// additional local-node optimizations.
     #[must_use]
     pub fn environment(mut self, environment: Environment) -> Self {
         self.is_local = environment.is_dev();
@@ -307,9 +298,6 @@ impl RpcProviderBuilder {
     }
 
     /// Sets the chain ID used by the provider.
-    ///
-    /// The chain ID will be automatically applied to all transactions via
-    /// the [`ChainIdFiller`].
     #[must_use]
     pub fn chain_id(mut self, chain_id: ChainId) -> Self {
         self.chain_id = Some(chain_id);
@@ -317,9 +305,6 @@ impl RpcProviderBuilder {
     }
 
     /// Configures the retry behavior for HTTP RPC requests.
-    ///
-    /// The provided [`RetryPolicyConfig`] determines the minimum and maximum
-    /// delay between retries, as well as the maximum number of retry attempts.
     #[must_use]
     pub fn retry_policy(mut self, retry_policy_config: RetryPolicyConfig) -> Self {
         self.retry_policy_config = retry_policy_config;
@@ -333,78 +318,33 @@ impl RpcProviderBuilder {
         self
     }
 
-    /// Builds the [`RpcProvider`].
-    ///
-    /// This method constructs all runtime components including:
-    ///
-    /// - HTTP transports for each configured RPC endpoint
-    /// - fallback transport layer for failover
-    /// - retry layer with exponential backoff
-    /// - HTTP provider for RPC requests
-    /// - WebSocket provider for subscriptions
+    /// Builds the [`HttpRpcProvider`].
     ///
     /// # Errors
     ///
-    /// Returns a [`TransportError`] if establishing the WebSocket connection
-    /// fails or if the HTTP provider cannot be properly initialized.
-    ///
-    /// # Panics
-    ///
-    /// If the method fails to build the `reqwest` client for HTTP requests.
-    /// This can happen due to:
-    /// * a TLS backend cannot be initialized,
-    /// * the resolver cannot load the system configuration.
-    pub async fn build(self) -> Result<RpcProvider, TransportError> {
-        let Self {
+    /// Returns a [`TransportError`] if the HTTP transport stack cannot be
+    /// initialized, including failures to create the underlying reqwest client.
+    pub fn build(self) -> Result<HttpRpcProvider, TransportError> {
+        let HttpRpcProviderBuilder {
             http_urls,
             retry_policy_config,
             chain_id,
             timeout,
             is_local,
             wallet,
-            ws_rpc_url,
             confirmations_poll_interval,
         } = self;
 
         let reqwest = reqwest::ClientBuilder::new()
             .timeout(timeout)
             .build()
-            .expect("Failed to build reqwest HTTP client");
-        // Build HTTP transports
+            .map_err(TransportErrorKind::custom)?;
+
         let transports = http_urls
             .into_iter()
             .map(|url| Http::with_client(reqwest.clone(), url))
             .collect::<Vec<_>>();
-        let transport_count =
-            NonZeroUsize::try_from(transports.len()).expect("Checked non-empty in with_config");
-
-        // Configure fallback layer
-        let fallback_layer = FallbackLayer::default().with_active_transport_count(transport_count);
-
-        // Configure retry policy.
-        //
-        // The RateLimitRetryPolicy already handles 503 Service Unavailable and other common RPC errors.
-        // We additionally check for other common transient errors:
-        //   - 408 Request Timeout
-        //   - 502 Bad Gateway
-        //   - 504 Gateway Timeout
-        let retry_policy =
-            RateLimitRetryPolicy::default().or(|error: &TransportError| match error {
-                RpcError::Transport(TransportErrorKind::HttpError(e)) => {
-                    matches!(e.status, 408 | 502 | 504)
-                }
-                // http reqwest time error is wrapped here. Just always retry custom errors.
-                RpcError::Transport(TransportErrorKind::Custom(_)) => true,
-                _ => false,
-            });
-
-        let retry_layer = RetryLayer::new(retry_policy, &retry_policy_config);
-
-        // Build transport stack
-        let transport = ServiceBuilder::new()
-            .layer(retry_layer)
-            .layer(fallback_layer)
-            .service(transports);
+        let transport = build_transport_stack(transports, &retry_policy_config);
 
         let client = RpcClient::builder().transport(transport, is_local);
         let client = if let Some(confirmations_poll_interval) = confirmations_poll_interval {
@@ -413,14 +353,13 @@ impl RpcProviderBuilder {
             client
         };
 
-        // Configure HTTP provider
         let http_provider_builder = ProviderBuilder::new()
             .filler(ChainIdFiller::new(chain_id))
             .filler(BlobGasFiller::default())
             .with_simple_nonce_management()
             .with_gas_estimation();
 
-        let http_provider = if let Some(wallet) = wallet {
+        let provider = if let Some(wallet) = wallet {
             http_provider_builder
                 .wallet(wallet)
                 .connect_client(client)
@@ -429,35 +368,15 @@ impl RpcProviderBuilder {
             http_provider_builder.connect_client(client).erased()
         };
 
-        // Build WebSocket provider
-        let ws_provider = ProviderBuilder::new()
-            .connect_ws(WsConnect::new(ws_rpc_url))
-            .await?
-            .erased();
-
-        Ok(RpcProvider {
-            http_provider,
-            ws_provider,
-        })
+        Ok(HttpRpcProvider(provider))
     }
 }
-impl RpcProvider {
-    /// Returns the HTTP RPC provider.
-    ///
-    /// This provider should be used for **all regular RPC calls** and
-    /// transaction submission.
-    #[must_use]
-    pub fn http(&self) -> DynProvider {
-        self.http_provider.clone()
-    }
 
-    /// Returns the WebSocket RPC provider.
-    ///
-    /// ⚠️ This provider should only be used for **subscriptions**
-    /// such as `eth_subscribe`.
+impl HttpRpcProvider {
+    /// Returns the HTTP RPC provider.
     #[must_use]
-    pub fn subscriptions(&self) -> DynProvider {
-        self.ws_provider.clone()
+    pub fn inner(&self) -> DynProvider {
+        self.0.clone()
     }
 }
 
@@ -509,19 +428,16 @@ struct RetryService<S> {
 
 impl<S> Service<RequestPacket> for RetryService<S>
 where
-    S: Service<
-            RequestPacket,
-            Response = alloy::rpc::json_rpc::ResponsePacket,
-            Error = TransportError,
-        > + Clone
+    S: Service<RequestPacket, Response = ResponsePacket, Error = TransportError>
+        + Clone
         + Send
         + Sync
         + 'static,
     S::Future: Send,
 {
-    type Response = alloy::rpc::json_rpc::ResponsePacket;
+    type Response = ResponsePacket;
     type Error = TransportError;
-    type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
+    type Future = TransportFut<'static>;
 
     fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         self.inner.poll_ready(cx)
@@ -550,11 +466,8 @@ where
 
 impl<S> RetryService<S>
 where
-    S: Service<
-            RequestPacket,
-            Response = alloy::rpc::json_rpc::ResponsePacket,
-            Error = TransportError,
-        > + Clone
+    S: Service<RequestPacket, Response = ResponsePacket, Error = TransportError>
+        + Clone
         + Send
         + Sync
         + 'static,
@@ -563,7 +476,7 @@ where
     async fn call_and_parse_error(
         mut self,
         request: RequestPacket,
-    ) -> Result<alloy::rpc::json_rpc::ResponsePacket, RpcError<TransportErrorKind>> {
+    ) -> Result<ResponsePacket, RpcError<TransportErrorKind>> {
         let resp = self.inner.call(request).await?;
         if let Some(e) = resp.as_error() {
             Err(TransportError::ErrorResp(e.to_owned()))
@@ -574,37 +487,4 @@ where
 }
 
 #[cfg(test)]
-pub(crate) mod tests {
-    use alloy::node_bindings::{Anvil, AnvilInstance};
-
-    use crate::{
-        Environment,
-        web3::{RpcProvider, RpcProviderBuilder, RpcProviderConfig},
-    };
-
-    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-    pub(crate) enum WithWallet {
-        Yes,
-        No,
-    }
-
-    pub(crate) async fn fixture(with_wallet: WithWallet) -> (AnvilInstance, RpcProvider) {
-        let anvil = Anvil::new().spawn();
-        let mut rpc_provider_builder =
-            RpcProviderBuilder::with_config(&RpcProviderConfig::with_default_values(
-                vec![anvil.endpoint_url()],
-                anvil.ws_endpoint_url(),
-            ))
-            .environment(Environment::Dev);
-        if with_wallet == WithWallet::Yes {
-            rpc_provider_builder =
-                rpc_provider_builder.wallet(anvil.wallet().expect("anvil should have a wallet"));
-        }
-        let rpc_provider = rpc_provider_builder
-            .chain_id(31_337)
-            .build()
-            .await
-            .expect("Should be able to spawn on local anvil");
-        (anvil, rpc_provider)
-    }
-}
+pub(crate) mod tests;

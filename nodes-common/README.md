@@ -10,7 +10,7 @@ Collection of common functions used by nodes in our MPC networks.
 
 | Feature | Default | Description |
 |---------|---------|-------------|
-| `alloy` | ✅ | Ethereum RPC provider via Alloy, ERC-165 interface detection |
+| `web3` | ✅ | HTTP Ethereum RPC provider via Alloy, ERC-165 interface detection |
 | `api` | ✅ | Health and version endpoints via Axum |
 | `postgres` | ✅ | PostgreSQL connection pool via SQLx |
 | `serde` | ✅ | Serde support |
