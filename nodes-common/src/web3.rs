@@ -192,6 +192,11 @@ impl Default for RetryPolicyConfig {
     }
 }
 
+enum NonceManagement {
+    Simple,
+    Cached,
+}
+
 /// Builder for constructing an [`RpcProvider`].
 ///
 /// The builder configures retry behavior, fallback transports, optional
@@ -206,6 +211,7 @@ pub struct RpcProviderBuilder {
     confirmations_poll_interval: Option<Duration>,
     is_local: bool,
     wallet: Option<EthereumWallet>,
+    nonce_management: NonceManagement,
 }
 
 impl From<RpcProviderConfig> for RpcProviderBuilder {
@@ -242,6 +248,7 @@ impl RpcProviderBuilder {
             is_local: false,
             wallet: None,
             confirmations_poll_interval: config.confirmations_poll_interval,
+            nonce_management: NonceManagement::Simple,
         }
     }
 
@@ -333,6 +340,24 @@ impl RpcProviderBuilder {
         self
     }
 
+    /// Add simple nonce management to the stack being built.
+    ///
+    /// See [`alloy::fillers::nonce::SimpleNonceManager`] for more information.
+    #[must_use]
+    pub fn with_simple_nonce_management(mut self) -> Self {
+        self.nonce_management = NonceManagement::Simple;
+        self
+    }
+
+    /// Add cached nonce management to the stack being built.
+    ///
+    /// See [`alloy::fillers::nonce::CachedNonceManager`] for more information.
+    #[must_use]
+    pub fn with_cached_nonce_management(mut self) -> Self {
+        self.nonce_management = NonceManagement::Cached;
+        self
+    }
+
     /// Builds the [`RpcProvider`].
     ///
     /// This method constructs all runtime components including:
@@ -364,6 +389,7 @@ impl RpcProviderBuilder {
             wallet,
             ws_rpc_url,
             confirmations_poll_interval,
+            nonce_management,
         } = self;
 
         let reqwest = reqwest::ClientBuilder::new()
@@ -417,16 +443,27 @@ impl RpcProviderBuilder {
         let http_provider_builder = ProviderBuilder::new()
             .filler(ChainIdFiller::new(chain_id))
             .filler(BlobGasFiller::default())
-            .with_simple_nonce_management()
             .with_gas_estimation();
 
-        let http_provider = if let Some(wallet) = wallet {
-            http_provider_builder
+        let http_provider = match (wallet, nonce_management) {
+            (Some(wallet), NonceManagement::Simple) => http_provider_builder
                 .wallet(wallet)
+                .with_simple_nonce_management()
                 .connect_client(client)
-                .erased()
-        } else {
-            http_provider_builder.connect_client(client).erased()
+                .erased(),
+            (Some(wallet), NonceManagement::Cached) => http_provider_builder
+                .wallet(wallet)
+                .with_cached_nonce_management()
+                .connect_client(client)
+                .erased(),
+            (None, NonceManagement::Simple) => http_provider_builder
+                .with_simple_nonce_management()
+                .connect_client(client)
+                .erased(),
+            (None, NonceManagement::Cached) => http_provider_builder
+                .with_cached_nonce_management()
+                .connect_client(client)
+                .erased(),
         };
 
         // Build WebSocket provider
