@@ -28,13 +28,28 @@ use std::net::SocketAddr;
 use std::str::FromStr;
 #[cfg(feature = "exporter-prometheus")]
 use std::time::Duration;
+#[cfg(feature = "datadog-tracing")]
 use std::{backtrace::Backtrace, panic};
-use telemetry_batteries::tracing::{TracingShutdownHandle, datadog::DatadogBattery};
+#[cfg(feature = "datadog-tracing")]
+pub use telemetry_batteries::tracing::TracingShutdownHandle;
+#[cfg(feature = "datadog-tracing")]
+use telemetry_batteries::tracing::datadog::DatadogBattery;
 use tracing_subscriber::{
     EnvFilter,
     fmt::{self},
 };
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+
+/// No-op shutdown handle returned by [`initialize_tracing`] when the
+/// `datadog-tracing` feature is disabled.
+///
+/// Exists only so the return type of [`initialize_tracing`] is stable
+/// across feature flags; the value is always `None` in practice and has
+/// no Drop side effects.
+#[cfg(not(feature = "datadog-tracing"))]
+#[derive(Debug)]
+#[non_exhaustive]
+pub struct TracingShutdownHandle;
 
 /// Configuration for telemetry (tracing + metrics) of the service.
 ///
@@ -560,42 +575,56 @@ pub fn initialize_metrics(config: &MetricsConfig) -> eyre::Result<()> {
 ///
 /// This is intended as a one-time setup call during service startup.
 pub fn initialize_tracing(config: &TracingConfig) -> eyre::Result<Option<TracingShutdownHandle>> {
-    let handle = {
+    let handle: eyre::Result<Option<TracingShutdownHandle>> = {
         if let Some(service_name) = config.service_name.as_deref() {
-            let tracing_shutdown_handle =
-                DatadogBattery::init(config.traces_endpoint.as_deref(), service_name, None, true);
-            // Set a custom panic hook to print backtraces on one line
-            panic::set_hook(Box::new(|panic_info| {
-                let message = match panic_info.payload().downcast_ref::<&str>() {
-                    Some(s) => *s,
-                    None => match panic_info.payload().downcast_ref::<String>() {
-                        Some(s) => s.as_str(),
-                        None => "Unknown panic message",
-                    },
-                };
-                let location = if let Some(location) = panic_info.location() {
-                    format!(
-                        "{}:{}:{}",
-                        location.file(),
-                        location.line(),
-                        location.column()
-                    )
-                } else {
-                    "Unknown location".to_string()
-                };
-
-                let backtrace = Backtrace::capture();
-                let backtrace_string = format!("{backtrace:?}");
-
-                let backtrace_single_line = backtrace_string.replace('\n', " | ");
-
-                tracing::error!(
-                    { backtrace = %backtrace_single_line, location = %location},
-                    "Panic occurred with message: {}",
-                    message
+            #[cfg(feature = "datadog-tracing")]
+            {
+                let tracing_shutdown_handle = DatadogBattery::init(
+                    config.traces_endpoint.as_deref(),
+                    service_name,
+                    None,
+                    true,
                 );
-            }));
-            Ok(Some(tracing_shutdown_handle))
+                // Set a custom panic hook to print backtraces on one line
+                panic::set_hook(Box::new(|panic_info| {
+                    let message = match panic_info.payload().downcast_ref::<&str>() {
+                        Some(s) => *s,
+                        None => match panic_info.payload().downcast_ref::<String>() {
+                            Some(s) => s.as_str(),
+                            None => "Unknown panic message",
+                        },
+                    };
+                    let location = if let Some(location) = panic_info.location() {
+                        format!(
+                            "{}:{}:{}",
+                            location.file(),
+                            location.line(),
+                            location.column()
+                        )
+                    } else {
+                        "Unknown location".to_string()
+                    };
+
+                    let backtrace = Backtrace::capture();
+                    let backtrace_string = format!("{backtrace:?}");
+
+                    let backtrace_single_line = backtrace_string.replace('\n', " | ");
+
+                    tracing::error!(
+                        { backtrace = %backtrace_single_line, location = %location},
+                        "Panic occurred with message: {}",
+                        message
+                    );
+                }));
+                Ok(Some(tracing_shutdown_handle))
+            }
+            #[cfg(not(feature = "datadog-tracing"))]
+            {
+                let _ = service_name;
+                eyre::bail!(
+                    "TracingConfig.service_name is set but the `datadog-tracing` feature is not enabled",
+                );
+            }
         } else {
             install_tracing("info");
             Ok(None)

@@ -17,12 +17,18 @@ metrics-exporter-dogstatsd = { workspace = true, optional = true }
 metrics-exporter-prometheus = { workspace = true, optional = true }
 metrics-exporter-statsd = { workspace = true, optional = true }
 secrecy = { workspace = true, optional = true }
-telemetry-batteries.workspace = true
+telemetry-batteries = { workspace = true, optional = true }
 tracing.workspace = true
-tracing-subscriber.workspace = true
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
 
 [features]
-default = ["exporter-datadog", "exporter-statsd", "exporter-prometheus"]
+default = [
+  "datadog-tracing",
+  "exporter-datadog",
+  "exporter-statsd",
+  "exporter-prometheus",
+]
+datadog-tracing = ["dep:telemetry-batteries"]
 exporter-datadog = ["dep:metrics-exporter-dogstatsd"]
 exporter-statsd = ["dep:metrics-exporter-statsd"]
 exporter-prometheus = [
