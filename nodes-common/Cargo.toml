@@ -16,7 +16,11 @@ alloy = { workspace = true, features = [
   "reqwest-rustls-tls",
   "std"
 ], optional = true }
-axum = { workspace = true, optional = true }
+axum = { workspace = true, features = [
+  "http1",
+  "tokio",
+  "tracing",
+], optional = true }
 backon = { workspace = true, features = ["std", "tokio-sleep"], optional = true }
 git-version = { workspace = true }
 humantime-serde = { workspace = true, optional = true }
@@ -42,7 +46,7 @@ alloy = { workspace = true, features = [
   "reqwest-rustls-tls",
   "std"
 ] }
-axum = { workspace = true }
+axum = { workspace = true, features = ["http1", "tokio", "tracing"] }
 http-body = "1"
 
 [features]

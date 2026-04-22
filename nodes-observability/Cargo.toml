@@ -19,7 +19,10 @@ metrics-exporter-statsd = { workspace = true, optional = true }
 secrecy = { workspace = true, optional = true }
 telemetry-batteries = { workspace = true, optional = true }
 tracing.workspace = true
-tracing-subscriber = { workspace = true, features = ["env-filter"] }
+tracing-subscriber = { workspace = true, features = [
+  "env-filter",
+  "fmt",
+] }
 
 [features]
 default = [
