@@ -32,7 +32,7 @@ sqlx = { workspace = true, features = [
   "tls-rustls-aws-lc-rs"
 ], optional = true }
 thiserror = { workspace = true }
-tokio = { workspace = true, features = ["macros", "rt", "signal"] }
+tokio = { workspace = true, features = ["macros", "rt", "signal", "time"] }
 tokio-util = { workspace = true }
 tower = { workspace = true, optional = true }
 tower-http = { workspace = true, features = ["set-header"], optional = true }
