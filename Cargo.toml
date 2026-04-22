@@ -11,7 +11,7 @@ license = "MIT OR Apache-2.0"
 
 [workspace.dependencies]
 alloy = { version = "2", default-features = false }
-axum = "0.8"
+axum = { version = "0.8", default-features = false }
 backon = { version = "1.6", default-features = false }
 eyre = "0.6"
 git-version = "0.3"
@@ -28,10 +28,10 @@ telemetry-batteries = "0.1.2"
 thiserror = "2"
 tokio = { version = "1" }
 tokio-util = "0.7"
-tower = { version = "0.5" }
+tower = { version = "0.5", default-features = false }
 tower-http = "0.6"
 tracing = "0.1"
-tracing-subscriber = "0.3"
+tracing-subscriber = { version = "0.3", default-features = false }
 
 # This profile can be used for CI in pull requests.
 [profile.ci-dev]
