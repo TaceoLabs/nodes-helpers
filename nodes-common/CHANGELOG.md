@@ -10,6 +10,7 @@
 - *(common)* Add builder step to provide nonce manager - ([4a558f8](https://github.com/TaceoLabs/nodes-helpers/commit/4a558f8ef77e9264b437f567c2df9e567dbe2a3f))
 - [**breaking**] Remove aws feature, localstack config helper and aws deps ([#27](https://github.com/TaceoLabs/nodes-helpers/pull/27)) - ([83af85c](https://github.com/TaceoLabs/nodes-helpers/commit/83af85c3f3664960c683a5ee97d7368ef831cd25))
 - Impl FromStr for Environment ([#24](https://github.com/TaceoLabs/nodes-helpers/pull/24)) - ([ae46971](https://github.com/TaceoLabs/nodes-helpers/commit/ae46971bd854f4e119d8c3253580ab87fa504afb))
+- bump alloy to version 2 ([#29](https://github.com/TaceoLabs/nodes-helpers/pull/29)) - ([2d1c9fc](https://github.com/TaceoLabs/nodes-helpers/pull/29/changes/2d1c9fc2c11bed4322aaaf7bf049e3d7b3b3f493))
 
 ### 🐛 Bug Fixes
 
