@@ -21,7 +21,7 @@ use alloy::{
     primitives::ChainId,
     providers::{
         DynProvider, Provider, ProviderBuilder,
-        fillers::{BlobGasFiller, ChainIdFiller},
+        fillers::{BlobGasFiller, ChainIdFiller, NonceManager, SimpleNonceManager},
     },
     rpc::{
         client::RpcClient,
@@ -320,11 +320,30 @@ impl HttpRpcProviderBuilder {
 
     /// Builds the [`HttpRpcProvider`].
     ///
+    /// Uses [`SimpleNonceManager::default()`] for nonce management. Use
+    /// [`Self::build_with_nonce_manager`] to provide a custom nonce manager.
+    ///
     /// # Errors
     ///
     /// Returns a [`TransportError`] if the HTTP transport stack cannot be
     /// initialized, including failures to create the underlying reqwest client.
     pub fn build(self) -> Result<HttpRpcProvider, TransportError> {
+        self.build_with_nonce_manager(SimpleNonceManager::default())
+    }
+
+    /// Builds the [`HttpRpcProvider`] using the provided nonce manager.
+    ///
+    /// This allows callers to customize how transaction nonces are tracked
+    /// while keeping the rest of the builder configuration unchanged.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`TransportError`] if the HTTP transport stack cannot be
+    /// initialized, including failures to create the underlying reqwest client.
+    pub fn build_with_nonce_manager<N: NonceManager + 'static>(
+        self,
+        nonce_manager: N,
+    ) -> Result<HttpRpcProvider, TransportError> {
         let HttpRpcProviderBuilder {
             http_urls,
             retry_policy_config,
@@ -356,7 +375,7 @@ impl HttpRpcProviderBuilder {
         let http_provider_builder = ProviderBuilder::new()
             .filler(ChainIdFiller::new(chain_id))
             .filler(BlobGasFiller::default())
-            .with_simple_nonce_management()
+            .with_nonce_management(nonce_manager)
             .with_gas_estimation();
 
         let provider = if let Some(wallet) = wallet {
