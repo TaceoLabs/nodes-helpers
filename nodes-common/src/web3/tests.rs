@@ -302,7 +302,6 @@ async fn http_provider_retries_json_rpc_error_then_succeeds() {
     );
 
     let block_number = provider
-        .inner()
         .get_block_number()
         .await
         .expect("retryable JSON-RPC error should be retried");
@@ -325,7 +324,6 @@ async fn http_provider_does_not_retry_non_retryable_json_rpc_error() {
     );
 
     let error = provider
-        .inner()
         .get_block_number()
         .await
         .expect_err("non-retryable JSON-RPC error should fail immediately");
@@ -352,7 +350,6 @@ async fn http_provider_retries_408_502_504() {
         );
 
         let block_number = provider
-            .inner()
             .get_block_number()
             .await
             .unwrap_or_else(|error| panic!("status {status} should be retried: {error:?}"));
@@ -377,7 +374,6 @@ async fn http_provider_does_not_retry_500() {
     );
 
     let error = provider
-        .inner()
         .get_block_number()
         .await
         .expect_err("HTTP 500 should not be retried");
@@ -410,7 +406,6 @@ async fn http_provider_prefers_slower_success_over_fast_json_rpc_error() {
     );
 
     let block_number = provider
-        .inner()
         .get_block_number()
         .await
         .expect("fallback should ignore JSON-RPC error responses and wait for success");
@@ -437,7 +432,6 @@ async fn http_provider_retries_timeout_custom_error() {
     );
 
     let error = provider
-        .inner()
         .get_block_number()
         .await
         .expect_err("request should time out after the configured retries");
@@ -463,7 +457,6 @@ async fn http_provider_does_not_retry_non_timeout_custom_error() {
     );
 
     let error = provider
-        .inner()
         .get_block_number()
         .await
         .expect_err("non-timeout custom errors should not be retried");

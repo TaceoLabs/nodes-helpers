@@ -12,6 +12,7 @@
 //! reliability when interacting with RPC endpoints.
 use std::{
     num::NonZeroUsize,
+    ops::Deref,
     task::{Context, Poll},
     time::Duration,
 };
@@ -394,8 +395,23 @@ impl HttpRpcProviderBuilder {
 impl HttpRpcProvider {
     /// Returns the HTTP RPC provider.
     #[must_use]
+    #[inline]
     pub fn inner(&self) -> DynProvider {
         self.0.clone()
+    }
+}
+
+impl AsRef<DynProvider> for HttpRpcProvider {
+    fn as_ref(&self) -> &DynProvider {
+        self
+    }
+}
+
+impl Deref for HttpRpcProvider {
+    type Target = DynProvider;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
     }
 }
 
