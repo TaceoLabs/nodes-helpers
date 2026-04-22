@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+## [0.5.1](https://github.com/TaceoLabs/nodes-helpers/compare/taceo-nodes-common-v0.5.0...taceo-nodes-common-v0.5.1)
+
+### ⛰️ Features
+
+
+- *(common)* QOL deref/AsRef for web3 provider ([#30](https://github.com/TaceoLabs/nodes-helpers/pull/30)) - ([0136b1e](https://github.com/TaceoLabs/nodes-helpers/commit/0136b1e0e8dbcb559a385195ae49cbe092d5b900))
+
+
 ## [0.5.0](https://github.com/TaceoLabs/nodes-helpers/compare/taceo-nodes-common-v0.4.4...taceo-nodes-common-v0.5.0)
 
 ### ⛰️ Features
