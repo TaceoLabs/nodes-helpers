@@ -44,6 +44,7 @@ use tower::{Layer, Service};
 use crate::Environment;
 
 pub mod erc165;
+pub mod event_stream;
 
 /// A dedicated HTTP RPC provider.
 ///
