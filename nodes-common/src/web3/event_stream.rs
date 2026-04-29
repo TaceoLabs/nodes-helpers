@@ -162,7 +162,7 @@ pub struct EventStreamBuilder<T> {
     chunk_size: NonZeroUsize,
     new_head_timeout: Duration,
     sync_timeout: Duration,
-    block_time: Duration,
+    sync_poll_interval: Duration,
 }
 
 impl<T> EventStreamBuilder<T>
@@ -196,7 +196,7 @@ where
             chunk_size: NonZeroUsize::new(1024).expect("1024 is non-zero"),
             new_head_timeout: Duration::from_secs(20),
             sync_timeout: Duration::from_secs(20),
-            block_time: Duration::from_secs(2),
+            sync_poll_interval: Duration::from_secs(2),
         }
     }
 
@@ -222,12 +222,12 @@ where
         self
     }
 
-    /// Sets the block time of the chain.
+    /// Sets the poll interval which the HTTP provider fetches its current block number.
     ///
     /// This is used for the HTTP provider to poll the current block to synchronize with the WS provider cutoff block.
     #[must_use]
-    pub fn block_time(mut self, block_time: Duration) -> Self {
-        self.block_time = block_time;
+    pub fn sync_poll_interval(mut self, sync_poll_interval: Duration) -> Self {
+        self.sync_poll_interval = sync_poll_interval;
         self
     }
 
@@ -243,7 +243,7 @@ where
 
     /// Sets the block-range chunk size used during backfill.
     #[must_use]
-    pub fn chunks(mut self, chunk_size: NonZeroUsize) -> Self {
+    pub fn chunk_size(mut self, chunk_size: NonZeroUsize) -> Self {
         self.chunk_size = chunk_size;
         self
     }
@@ -272,7 +272,7 @@ where
             chunk_size,
             new_head_timeout,
             sync_timeout,
-            block_time,
+            sync_poll_interval,
         } = self;
         let topic = topic.into();
         let subscription = ws_provider
@@ -321,10 +321,11 @@ where
         // now we need to wait until the HTTP provider is also at that specific block number to assure that get_logs will fetch up until the cutoff
         tokio::time::timeout(
             sync_timeout,
-            block_until_cutoff(&http_provider, backfill_cutoff, block_time),
+            block_until_cutoff(&http_provider, backfill_cutoff, sync_poll_interval),
         )
         .await
         .map_err(|_| EventStreamError::SynchronizingHttpWsTimeout)??;
+
         let backfill_stream = stream::iter(block_ranges(
             chain_cursor.block,
             backfill_cutoff,
@@ -631,7 +632,7 @@ mod tests {
         };
         let mut stream = h
             .builder(cursor)
-            .chunks(NonZeroUsize::try_from(1).expect("1 is non-zero"))
+            .chunk_size(NonZeroUsize::try_from(1).expect("1 is non-zero"))
             .build()
             .await?;
 
@@ -680,7 +681,6 @@ mod tests {
     async fn test_return_lagging() -> eyre::Result<()> {
         let h = TestHarness::new().await?;
 
-        // we simply take cursor that is not genesis
         let cursor = ChainCursor::new(0, 1);
         let mut stream = h
             .builder(cursor)
@@ -688,20 +688,20 @@ mod tests {
             .build()
             .await?;
 
-        // emit two events which is larger than buffer size
-        h.emit_event(99).await?;
-        h.emit_event(99).await?;
+        // Batch 3 events into one block. The channel capacity is 1, so
+        // receiving 3 events at once guarantees the broadcast channel lags.
+        h.emit_events_in_one_block(&[1, 2, 3]).await?;
 
         let error = tokio::time::timeout(
             TIMEOUT,
             stream
                 .by_ref()
-                .take(2)
+                .take(3)
                 .map_ok(|log| decode_log(&log).to::<u64>())
                 .try_collect::<Vec<_>>(),
         )
         .await
-        .expect("timed out waiting for backfilled logs")
+        .expect("timed out waiting for logs")
         .expect_err("should be lagging behind");
 
         assert!(matches!(error, EventStreamError::Lagging));
@@ -767,21 +767,21 @@ mod tests {
     #[test]
     fn test_block_ranges_chunk_larger_than_range() {
         let ranges: Vec<_> =
-            block_ranges(5, 8, NonZeroUsize::new(100).expect("1 is non-zero")).collect();
+            block_ranges(5, 8, NonZeroUsize::new(100).expect("100 is non-zero")).collect();
         assert_eq!(ranges, vec![(5, 8)]);
     }
 
     #[test]
     fn test_block_ranges_exact_multiple() {
         let ranges: Vec<_> =
-            block_ranges(0, 3, NonZeroUsize::new(2).expect("1 is non-zero")).collect();
+            block_ranges(0, 3, NonZeroUsize::new(2).expect("2 is non-zero")).collect();
         assert_eq!(ranges, vec![(0, 1), (2, 3)]);
     }
 
     #[test]
     fn test_block_ranges_start_greater_than_end() {
         let ranges: Vec<_> =
-            block_ranges(10, 5, NonZeroUsize::new(3).expect("1 is non-zero")).collect();
+            block_ranges(10, 5, NonZeroUsize::new(3).expect("3 is non-zero")).collect();
         assert!(ranges.is_empty());
     }
 
@@ -824,6 +824,56 @@ mod tests {
             .await;
 
         assert!(matches!(result, Err(EventStreamError::CannotFetchHead)));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_sync_timeout_returns_error() -> eyre::Result<()> {
+        // Anvil A: WS provider, mines normally
+        let anvil_ws = Anvil::new().spawn();
+        let ws_provider = ProviderBuilder::new()
+            .connect_ws(WsConnect::new(anvil_ws.ws_endpoint()))
+            .await?
+            .erased();
+        ws_provider.anvil_set_auto_mine(true).await?;
+        ws_provider.anvil_set_interval_mining(2).await?;
+
+        // Anvil B: HTTP provider, frozen at genesis
+        let anvil_http = Anvil::new().spawn();
+        let http_freeze = ProviderBuilder::new()
+            .connect_http(anvil_http.endpoint_url())
+            .erased();
+        http_freeze.anvil_set_auto_mine(false).await?;
+        http_freeze.anvil_set_interval_mining(0).await?;
+
+        let signer: PrivateKeySigner = anvil_http.keys()[0].clone().into();
+        let http_provider =
+            HttpRpcProviderBuilder::with_default_values(vec![anvil_http.endpoint_url()])
+                .environment(Environment::Dev)
+                .wallet(EthereumWallet::from(signer))
+                .chain_id(31_337)
+                .build()?;
+
+        // Mine a block on Anvil A so subscribe_blocks yields a header
+        ws_provider.anvil_mine(Some(1), None).await?;
+
+        let cursor = ChainCursor::new(1, 0);
+        let result = EventStreamBuilder::new(
+            cursor,
+            Address::ZERO,
+            http_provider,
+            ws_provider,
+            vec![TestEmitter::TestEvent::SIGNATURE_HASH],
+        )
+        .sync_timeout(Duration::from_millis(200))
+        .sync_poll_interval(Duration::from_millis(50))
+        .build()
+        .await;
+
+        assert!(matches!(
+            result,
+            Err(EventStreamError::SynchronizingHttpWsTimeout)
+        ));
         Ok(())
     }
 }
