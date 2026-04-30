@@ -45,7 +45,7 @@
 //! |---|---|---|
 //! | `channel_size` | 1024 | Broadcast channel capacity for WS events. Overflow yields [`EventStreamError::Lagging`]. |
 //! | `chunk_size` | 1024 | Blocks per `eth_getLogs` request during backfill. Smaller = smaller RPC responses; larger = fewer round-trips. |
-//! | `new_head_timeout` | 20 s | Max wait for `confirmations_after_sync_block` block headers from WS. |
+//! | `new_head_timeout` | 30 s | Max wait for `confirmations_after_sync_block` block headers from WS. |
 //! | `sync_timeout` | 20 s | Max wait for HTTP provider to reach the cutoff block. |
 //! | `sync_poll_interval` | 2 s | Interval between `get_block_number` polls during HTTP/WS sync. |
 //! | `confirmations_after_sync_block` | 5 | Block headers to observe from WS before starting backfill. First header sets the cutoff; the rest are wait time. |
@@ -221,7 +221,7 @@ where
     /// to filter logs on the RPC side.
     #[allow(
         clippy::missing_panics_doc,
-        reason = "Can actually not panic as 1024 is non-zero"
+        reason = "Can actually not panic as default values are non-zero"
     )]
     #[must_use]
     pub fn new(
@@ -240,7 +240,7 @@ where
             skip_backfill: SkipBackfill::No,
             channel_size: NonZeroUsize::new(1024).expect("1024 is non-zero"),
             chunk_size: NonZeroUsize::new(1024).expect("1024 is non-zero"),
-            new_head_timeout: Duration::from_secs(20),
+            new_head_timeout: Duration::from_secs(30),
             sync_timeout: Duration::from_secs(20),
             sync_poll_interval: Duration::from_secs(2),
             confirmations_after_sync_block: NonZeroUsize::new(5).expect("5 is non-zero"),
