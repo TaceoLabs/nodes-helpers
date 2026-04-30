@@ -201,14 +201,14 @@ pub struct EventStreamBuilder<T> {
     contract_address: Address,
     http_provider: web3::HttpRpcProvider,
     ws_provider: DynProvider,
-    skip_backfill: SkipBackfill,
+    skip_backfill: Option<SkipBackfill>,
     topic: T,
-    channel_size: NonZeroUsize,
-    chunk_size: NonZeroUsize,
-    new_head_timeout: Duration,
-    sync_timeout: Duration,
-    sync_poll_interval: Duration,
-    confirmations_after_sync_block: NonZeroUsize,
+    channel_size: Option<NonZeroUsize>,
+    chunk_size: Option<NonZeroUsize>,
+    new_head_timeout: Option<Duration>,
+    sync_timeout: Option<Duration>,
+    sync_poll_interval: Option<Duration>,
+    confirmations_after_sync_block: Option<NonZeroUsize>,
 }
 
 impl<T> EventStreamBuilder<T>
@@ -219,10 +219,6 @@ where
     ///
     /// `topic` is the event signature hash (or a collection of hashes) used
     /// to filter logs on the RPC side.
-    #[allow(
-        clippy::missing_panics_doc,
-        reason = "Can actually not panic as default values are non-zero"
-    )]
     #[must_use]
     pub fn new(
         chain_cursor: ChainCursor,
@@ -237,19 +233,19 @@ where
             http_provider,
             ws_provider,
             topic,
-            skip_backfill: SkipBackfill::No,
-            channel_size: NonZeroUsize::new(1024).expect("1024 is non-zero"),
-            chunk_size: NonZeroUsize::new(1024).expect("1024 is non-zero"),
-            new_head_timeout: Duration::from_secs(30),
-            sync_timeout: Duration::from_secs(20),
-            sync_poll_interval: Duration::from_secs(2),
-            confirmations_after_sync_block: NonZeroUsize::new(5).expect("5 is non-zero"),
+            skip_backfill: None,
+            channel_size: None,
+            chunk_size: None,
+            new_head_timeout: None,
+            sync_timeout: None,
+            sync_poll_interval: None,
+            confirmations_after_sync_block: None,
         }
     }
 
     /// Sets whether historical backfill should be skipped.
     #[must_use]
-    pub fn skip_backfill(mut self, skip_backfill: SkipBackfill) -> Self {
+    pub fn skip_backfill(mut self, skip_backfill: Option<SkipBackfill>) -> Self {
         self.skip_backfill = skip_backfill;
         self
     }
@@ -257,14 +253,14 @@ where
     /// Sets the timeout for waiting on the next block header from the WS
     /// provider when determining the backfill cutoff.
     #[must_use]
-    pub fn new_head_timeout(mut self, new_head_timeout: Duration) -> Self {
+    pub fn new_head_timeout(mut self, new_head_timeout: Option<Duration>) -> Self {
         self.new_head_timeout = new_head_timeout;
         self
     }
 
     /// Sets the timeout for waiting until WS and HTTP are synced.
     #[must_use]
-    pub fn sync_timeout(mut self, sync_timeout: Duration) -> Self {
+    pub fn sync_timeout(mut self, sync_timeout: Option<Duration>) -> Self {
         self.sync_timeout = sync_timeout;
         self
     }
@@ -273,7 +269,7 @@ where
     ///
     /// This is used for the HTTP provider to poll the current block to synchronize with the WS provider cutoff block.
     #[must_use]
-    pub fn sync_poll_interval(mut self, sync_poll_interval: Duration) -> Self {
+    pub fn sync_poll_interval(mut self, sync_poll_interval: Option<Duration>) -> Self {
         self.sync_poll_interval = sync_poll_interval;
         self
     }
@@ -283,14 +279,14 @@ where
     /// If the consumer falls behind by more than this many events the stream
     /// yields [`EventStreamError::Lagging`].
     #[must_use]
-    pub fn channel_size(mut self, channel_size: NonZeroUsize) -> Self {
+    pub fn channel_size(mut self, channel_size: Option<NonZeroUsize>) -> Self {
         self.channel_size = channel_size;
         self
     }
 
     /// Sets the block-range chunk size used during backfill.
     #[must_use]
-    pub fn chunk_size(mut self, chunk_size: NonZeroUsize) -> Self {
+    pub fn chunk_size(mut self, chunk_size: Option<NonZeroUsize>) -> Self {
         self.chunk_size = chunk_size;
         self
     }
@@ -306,7 +302,7 @@ where
     #[must_use]
     pub fn confirmations_after_sync_block(
         mut self,
-        confirmations_after_sync_block: NonZeroUsize,
+        confirmations_after_sync_block: Option<NonZeroUsize>,
     ) -> Self {
         self.confirmations_after_sync_block = confirmations_after_sync_block;
         self
@@ -327,6 +323,14 @@ where
     ///   block headers from the WS provider.
     /// - [`EventStreamError::SynchronizingHttpWsTimeout`] — HTTP provider
     ///   did not reach the cutoff block in time.
+    #[allow(
+        clippy::missing_panics_doc,
+        reason = "Can actually not panic as default values are non-zero"
+    )]
+    #[allow(
+        clippy::too_many_lines,
+        reason = "Resolving Option defaults adds lines but keeps the method cohesive"
+    )]
     pub async fn build(
         self,
     ) -> Result<impl Stream<Item = Result<Log, EventStreamError>>, EventStreamError> {
@@ -344,6 +348,15 @@ where
             sync_poll_interval,
             confirmations_after_sync_block,
         } = self;
+        let skip_backfill = skip_backfill.unwrap_or(SkipBackfill::No);
+        let channel_size =
+            channel_size.unwrap_or(NonZeroUsize::new(1024).expect("1024 is non-zero"));
+        let chunk_size = chunk_size.unwrap_or(NonZeroUsize::new(1024).expect("1024 is non-zero"));
+        let new_head_timeout = new_head_timeout.unwrap_or(Duration::from_secs(30));
+        let sync_timeout = sync_timeout.unwrap_or(Duration::from_secs(20));
+        let sync_poll_interval = sync_poll_interval.unwrap_or(Duration::from_secs(2));
+        let confirmations_after_sync_block =
+            confirmations_after_sync_block.unwrap_or(NonZeroUsize::new(5).expect("5 is non-zero"));
         let topic = topic.into();
         let subscription = ws_provider
             .subscribe_logs(
@@ -712,7 +725,7 @@ mod tests {
         };
         let mut stream = h
             .builder(cursor)
-            .chunk_size(NonZeroUsize::try_from(1).expect("1 is non-zero"))
+            .chunk_size(Some(NonZeroUsize::try_from(1).expect("1 is non-zero")))
             .build()
             .await?;
 
@@ -764,7 +777,7 @@ mod tests {
         let cursor = ChainCursor::new(0, 1);
         let mut stream = h
             .builder(cursor)
-            .channel_size(NonZeroUsize::try_from(1).expect("1 is non-zero"))
+            .channel_size(Some(NonZeroUsize::try_from(1).expect("1 is non-zero")))
             .build()
             .await?;
 
@@ -801,7 +814,7 @@ mod tests {
         };
         let mut stream = h
             .builder(cursor)
-            .skip_backfill(SkipBackfill::Yes)
+            .skip_backfill(Some(SkipBackfill::Yes))
             .build()
             .await?;
 
@@ -899,7 +912,7 @@ mod tests {
         let cursor = ChainCursor::new(1, 0);
         let result = h
             .builder(cursor)
-            .new_head_timeout(Duration::from_millis(100))
+            .new_head_timeout(Some(Duration::from_millis(100)))
             .build()
             .await;
 
@@ -945,8 +958,8 @@ mod tests {
             ws_provider,
             vec![TestEmitter::TestEvent::SIGNATURE_HASH],
         )
-        .sync_timeout(Duration::from_millis(200))
-        .sync_poll_interval(Duration::from_millis(50))
+        .sync_timeout(Some(Duration::from_millis(200)))
+        .sync_poll_interval(Some(Duration::from_millis(50)))
         .build()
         .await;
 
