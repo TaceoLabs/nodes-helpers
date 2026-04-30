@@ -390,22 +390,17 @@ where
         //
         // We also take additionally confirmations_after_sync_block headers afterwards. The additional wait time increases the chance that the HTTP and WS provider agree on the block cutoff.
         let backfill_cutoff = tokio::time::timeout(new_head_timeout, async {
-            #[allow(
-                clippy::missing_panics_doc,
-                reason = "Can not panic as we collect with NonZero value"
-            )]
-            Ok::<_, EventStreamError>(
-                *ws_provider
-                    .subscribe_blocks()
-                    .await?
-                    .into_stream()
-                    .take(confirmations_after_sync_block.get())
-                    .map(|h| h.number)
-                    .collect::<Vec<_>>()
-                    .await
-                    .first()
-                    .expect("Is at least one"),
-            )
+            ws_provider
+                .subscribe_blocks()
+                .await?
+                .into_stream()
+                .take(confirmations_after_sync_block.get())
+                .map(|h| h.number)
+                .collect::<Vec<_>>()
+                .await
+                .first()
+                .copied()
+                .ok_or(EventStreamError::CannotFetchHead)
         })
         .await
         .map_err(|_| EventStreamError::CannotFetchHead)??;
