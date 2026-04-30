@@ -437,7 +437,8 @@ where
                 .subscribe_blocks()
                 .await?
                 .into_stream()
-                .take(confirmations_after_sync_block.get())
+                // +1 to actually collect as many blocks AFTER initial block as confirmations_after_sync_block requests
+                .take(confirmations_after_sync_block.get() + 1)
                 .map(|h| h.number)
                 .collect::<Vec<_>>()
                 .await
