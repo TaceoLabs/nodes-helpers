@@ -13,7 +13,10 @@ publish = true
 alloy = { workspace = true, features = [
   "contract",
   "json-rpc",
+  "provider-ws",
+  "pubsub",
   "reqwest-rustls-tls",
+  "rpc-types",
   "std"
 ], optional = true }
 axum = { workspace = true, features = [
@@ -22,6 +25,7 @@ axum = { workspace = true, features = [
   "tracing",
 ], optional = true }
 backon = { workspace = true, features = ["std", "tokio-sleep"], optional = true }
+futures = { workspace = true, optional = true }
 git-version = { workspace = true }
 humantime-serde = { workspace = true, optional = true }
 secrecy = { workspace = true, features = ["serde"], optional = true }
@@ -44,9 +48,13 @@ alloy = { workspace = true, features = [
   "json-rpc",
   "node-bindings",
   "reqwest-rustls-tls",
+  "rpc-types-eth",
+  "signer-local",
+  "signers",
   "std"
 ] }
 axum = { workspace = true, features = ["http1", "tokio", "tracing"] }
+eyre.workspace = true
 http-body = "1"
 
 [features]
@@ -63,6 +71,7 @@ serde = ["dep:serde"]
 web3 = [
   "dep:alloy",
   "dep:backon",
+  "dep:futures",
   "dep:humantime-serde",
   "dep:serde",
   "dep:tower"
