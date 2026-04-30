@@ -644,7 +644,6 @@ mod tests {
                 .await?
                 .erased();
             let contract = TestEmitter::deploy(http_provider.inner()).await?;
-            ws_provider.anvil_set_auto_mine(true).await?;
             ws_provider.anvil_set_interval_mining(2).await?;
             Ok(Self {
                 _anvil: anvil,
@@ -1004,7 +1003,6 @@ mod tests {
             .connect_ws(WsConnect::new(anvil_ws.ws_endpoint()))
             .await?
             .erased();
-        ws_provider.anvil_set_auto_mine(true).await?;
         ws_provider.anvil_set_interval_mining(2).await?;
 
         // Anvil B: HTTP provider, frozen at genesis
