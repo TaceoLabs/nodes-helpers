@@ -12,19 +12,44 @@
 //!
 //! Call [`initialize_tracing`] once at startup to configure tracing and metrics.
 
+#[cfg(any(
+    feature = "exporter-datadog",
+    feature = "exporter-statsd",
+    feature = "exporter-prometheus"
+))]
 use eyre::Context;
+#[cfg(feature = "exporter-datadog")]
 use metrics_exporter_dogstatsd::DogStatsDBuilder;
+#[cfg(feature = "exporter-prometheus")]
 use secrecy::{ExposeSecret, SecretString};
+#[cfg(feature = "exporter-prometheus")]
 use std::net::SocketAddr;
+#[cfg(feature = "exporter-prometheus")]
 use std::str::FromStr;
+#[cfg(feature = "exporter-prometheus")]
 use std::time::Duration;
+#[cfg(feature = "datadog-tracing")]
 use std::{backtrace::Backtrace, panic};
-use telemetry_batteries::tracing::{TracingShutdownHandle, datadog::DatadogBattery};
+#[cfg(feature = "datadog-tracing")]
+pub use telemetry_batteries::tracing::TracingShutdownHandle;
+#[cfg(feature = "datadog-tracing")]
+use telemetry_batteries::tracing::datadog::DatadogBattery;
 use tracing_subscriber::{
     EnvFilter,
     fmt::{self},
 };
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+
+/// No-op shutdown handle returned by [`initialize_tracing`] when the
+/// `datadog-tracing` feature is disabled.
+///
+/// Exists only so the return type of [`initialize_tracing`] is stable
+/// across feature flags; the value is always `None` in practice and has
+/// no Drop side effects.
+#[cfg(not(feature = "datadog-tracing"))]
+#[derive(Debug)]
+#[non_exhaustive]
+pub struct TracingShutdownHandle;
 
 /// Configuration for telemetry (tracing + metrics) of the service.
 ///
@@ -76,14 +101,20 @@ impl TracingConfig {
 
 /// Metrics exporter configuration.
 ///
-/// Decides which backend (Datadog, StatsD or Prometheus) to use.
+/// Decides which backend (Datadog, StatsD or Prometheus) to use. Each
+/// variant is gated behind a Cargo feature (`exporter-datadog`,
+/// `exporter-statsd`, `exporter-prometheus`); with all three features
+/// disabled the enum is uninhabited and no configuration can be built.
 #[derive(Debug, Clone)]
 pub enum MetricsConfig {
-    /// Datadog config
+    /// Datadog config. Requires the `exporter-datadog` feature.
+    #[cfg(feature = "exporter-datadog")]
     Datadog(DatadogMetricsConfig),
-    /// StatsD config
+    /// StatsD config. Requires the `exporter-statsd` feature.
+    #[cfg(feature = "exporter-statsd")]
     StatsD(StatsDMetricsConfig),
-    /// Prometheus config
+    /// Prometheus config. Requires the `exporter-prometheus` feature.
+    #[cfg(feature = "exporter-prometheus")]
     Prometheus(PrometheusMetricsConfig),
 }
 
@@ -95,19 +126,34 @@ impl MetricsConfig {
     pub fn try_from_env() -> eyre::Result<Option<Self>> {
         match std::env::var("METRICS_EXPORTER") {
             Ok(choice) => match choice.trim().to_lowercase().as_str() {
+                #[cfg(feature = "exporter-datadog")]
                 "datadog" => Ok(Some(Self::Datadog(
                     DatadogMetricsConfig::try_from_env()
                         .context("during constructing Datadog metrics exporter from environment")?,
                 ))),
+                #[cfg(not(feature = "exporter-datadog"))]
+                "datadog" => eyre::bail!(
+                    "environment: METRICS_EXPORTER=\"datadog\" requested but the `exporter-datadog` feature is not enabled",
+                ),
+                #[cfg(feature = "exporter-statsd")]
                 "statsd" => Ok(Some(Self::StatsD(
                     StatsDMetricsConfig::try_from_env()
                         .context("during constructing StatsD metrics exporter from environment")?,
                 ))),
+                #[cfg(not(feature = "exporter-statsd"))]
+                "statsd" => eyre::bail!(
+                    "environment: METRICS_EXPORTER=\"statsd\" requested but the `exporter-statsd` feature is not enabled",
+                ),
+                #[cfg(feature = "exporter-prometheus")]
                 "prometheus" => Ok(Some(Self::Prometheus(
                     PrometheusMetricsConfig::try_from_env().context(
                         "during constructing Prometheus metrics exporter from environment",
                     )?,
                 ))),
+                #[cfg(not(feature = "exporter-prometheus"))]
+                "prometheus" => eyre::bail!(
+                    "environment: METRICS_EXPORTER=\"prometheus\" requested but the `exporter-prometheus` feature is not enabled",
+                ),
                 _ => eyre::bail!(
                     "environment: METRICS_EXPORTER must be \"datadog\", \"statsd\", or \"prometheus\", not \"{}\"",
                     choice
@@ -122,6 +168,7 @@ impl MetricsConfig {
 }
 
 /// Datadog metrics exporter configuration (DogStatsD).
+#[cfg(feature = "exporter-datadog")]
 #[derive(Debug, Clone)]
 pub struct DatadogMetricsConfig {
     pub(crate) host: String,
@@ -129,6 +176,7 @@ pub struct DatadogMetricsConfig {
     pub(crate) prefix: Option<String>,
 }
 
+#[cfg(feature = "exporter-datadog")]
 impl DatadogMetricsConfig {
     /// Build a [`DatadogMetricsConfig`] from environment variables:
     /// * `METRICS_DATADOG_HOST`
@@ -174,6 +222,7 @@ impl DatadogMetricsConfig {
 }
 
 /// StatsD metrics exporter configuration.
+#[cfg(feature = "exporter-statsd")]
 #[derive(Debug, Clone)]
 pub struct StatsDMetricsConfig {
     pub(crate) host: String,
@@ -183,6 +232,7 @@ pub struct StatsDMetricsConfig {
     pub(crate) buffer_size: Option<usize>,
 }
 
+#[cfg(feature = "exporter-statsd")]
 impl StatsDMetricsConfig {
     /// Build a [`StatsDMetricsConfig`] from environment variables:
     /// * `METRICS_STATSD_HOST` / `PORT` (port defaults to 8125)
@@ -255,6 +305,7 @@ impl StatsDMetricsConfig {
 }
 
 /// Prometheus metrics exporter configuration.
+#[cfg(feature = "exporter-prometheus")]
 #[derive(Debug, Clone)]
 pub enum PrometheusMetricsConfig {
     /// Prometheus scrape endpoint (the service exposes metrics over HTTP).
@@ -263,6 +314,7 @@ pub enum PrometheusMetricsConfig {
     Push(PushPrometheusMetricsConfig),
 }
 
+#[cfg(feature = "exporter-prometheus")]
 impl PrometheusMetricsConfig {
     /// Build a [`PrometheusMetricsConfig`] from environment variables:
     /// * `METRICS_PROMETHEUS_MODE` (must be `scrape` or `push`)
@@ -289,11 +341,13 @@ impl PrometheusMetricsConfig {
 }
 
 /// Scrape mode Prometheus metrics configuration.
+#[cfg(feature = "exporter-prometheus")]
 #[derive(Debug, Clone)]
 pub struct ScrapePrometheusMetricsConfig {
     pub(crate) bind_addr: Option<SocketAddr>,
 }
 
+#[cfg(feature = "exporter-prometheus")]
 impl ScrapePrometheusMetricsConfig {
     /// Build a [`ScrapePrometheusMetricsConfig`] from environment variable
     /// `METRICS_PROMETHEUS_BIND_ADDR` (optional).
@@ -320,6 +374,7 @@ impl ScrapePrometheusMetricsConfig {
 }
 
 /// Push mode Prometheus metrics configuration.
+#[cfg(feature = "exporter-prometheus")]
 #[derive(Debug, Clone)]
 pub struct PushPrometheusMetricsConfig {
     pub(crate) endpoint: String,
@@ -328,6 +383,7 @@ pub struct PushPrometheusMetricsConfig {
     pub(crate) password: Option<SecretString>,
     pub(crate) use_http_post_method: bool,
 }
+#[cfg(feature = "exporter-prometheus")]
 impl PushPrometheusMetricsConfig {
     /// Build a [`PushPrometheusMetricsConfig`] from environment variables:
     /// `METRICS_PROMETHEUS_ENDPOINT`, `INTERVAL`, `USERNAME`, `PASSWORD`,
@@ -402,7 +458,24 @@ impl PushPrometheusMetricsConfig {
 ///
 /// Called internally by [`initialize_tracing`] once configuration is loaded.
 pub fn initialize_metrics(config: &MetricsConfig) -> eyre::Result<()> {
+    // When no exporter features are enabled, `MetricsConfig` is uninhabited:
+    // no value can be constructed, so the signature stays stable but the
+    // match below would be both empty and non-exhaustive from rustc's point
+    // of view (references are always considered inhabited). Gate the match
+    // on at least one exporter feature being active.
+    #[cfg(not(any(
+        feature = "exporter-datadog",
+        feature = "exporter-statsd",
+        feature = "exporter-prometheus"
+    )))]
+    let _ = config;
+    #[cfg(any(
+        feature = "exporter-datadog",
+        feature = "exporter-statsd",
+        feature = "exporter-prometheus"
+    ))]
     match config {
+        #[cfg(feature = "exporter-datadog")]
         MetricsConfig::Datadog(datadog_conf) => {
             tracing::debug!("Setting up Datadog metrics exporter ..");
             let mut builder = DogStatsDBuilder::default()
@@ -413,6 +486,7 @@ pub fn initialize_metrics(config: &MetricsConfig) -> eyre::Result<()> {
             };
             builder.install()?;
         }
+        #[cfg(feature = "exporter-statsd")]
         MetricsConfig::StatsD(statsd_conf) => {
             tracing::debug!("Setting up StatsD metrics exporter ..");
             let builder = metrics_exporter_statsd::StatsdBuilder::from(
@@ -439,6 +513,7 @@ pub fn initialize_metrics(config: &MetricsConfig) -> eyre::Result<()> {
             metrics::set_global_recorder(recorder)
                 .context("during setting StatsD metrics exporter as global recorder")?;
         }
+        #[cfg(feature = "exporter-prometheus")]
         MetricsConfig::Prometheus(prometheus_conf) => match prometheus_conf {
             PrometheusMetricsConfig::Scrape(scrape_conf) => {
                 tracing::debug!("Setting up Prometheus scrape metrics exporter ..");
@@ -500,42 +575,56 @@ pub fn initialize_metrics(config: &MetricsConfig) -> eyre::Result<()> {
 ///
 /// This is intended as a one-time setup call during service startup.
 pub fn initialize_tracing(config: &TracingConfig) -> eyre::Result<Option<TracingShutdownHandle>> {
-    let handle = {
+    let handle: eyre::Result<Option<TracingShutdownHandle>> = {
         if let Some(service_name) = config.service_name.as_deref() {
-            let tracing_shutdown_handle =
-                DatadogBattery::init(config.traces_endpoint.as_deref(), service_name, None, true);
-            // Set a custom panic hook to print backtraces on one line
-            panic::set_hook(Box::new(|panic_info| {
-                let message = match panic_info.payload().downcast_ref::<&str>() {
-                    Some(s) => *s,
-                    None => match panic_info.payload().downcast_ref::<String>() {
-                        Some(s) => s.as_str(),
-                        None => "Unknown panic message",
-                    },
-                };
-                let location = if let Some(location) = panic_info.location() {
-                    format!(
-                        "{}:{}:{}",
-                        location.file(),
-                        location.line(),
-                        location.column()
-                    )
-                } else {
-                    "Unknown location".to_string()
-                };
-
-                let backtrace = Backtrace::capture();
-                let backtrace_string = format!("{backtrace:?}");
-
-                let backtrace_single_line = backtrace_string.replace('\n', " | ");
-
-                tracing::error!(
-                    { backtrace = %backtrace_single_line, location = %location},
-                    "Panic occurred with message: {}",
-                    message
+            #[cfg(feature = "datadog-tracing")]
+            {
+                let tracing_shutdown_handle = DatadogBattery::init(
+                    config.traces_endpoint.as_deref(),
+                    service_name,
+                    None,
+                    true,
                 );
-            }));
-            Ok(Some(tracing_shutdown_handle))
+                // Set a custom panic hook to print backtraces on one line
+                panic::set_hook(Box::new(|panic_info| {
+                    let message = match panic_info.payload().downcast_ref::<&str>() {
+                        Some(s) => *s,
+                        None => match panic_info.payload().downcast_ref::<String>() {
+                            Some(s) => s.as_str(),
+                            None => "Unknown panic message",
+                        },
+                    };
+                    let location = if let Some(location) = panic_info.location() {
+                        format!(
+                            "{}:{}:{}",
+                            location.file(),
+                            location.line(),
+                            location.column()
+                        )
+                    } else {
+                        "Unknown location".to_string()
+                    };
+
+                    let backtrace = Backtrace::capture();
+                    let backtrace_string = format!("{backtrace:?}");
+
+                    let backtrace_single_line = backtrace_string.replace('\n', " | ");
+
+                    tracing::error!(
+                        { backtrace = %backtrace_single_line, location = %location},
+                        "Panic occurred with message: {}",
+                        message
+                    );
+                }));
+                Ok(Some(tracing_shutdown_handle))
+            }
+            #[cfg(not(feature = "datadog-tracing"))]
+            {
+                let _ = service_name;
+                eyre::bail!(
+                    "TracingConfig.service_name is set but the `datadog-tracing` feature is not enabled",
+                );
+            }
         } else {
             install_tracing("info");
             Ok(None)

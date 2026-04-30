@@ -45,7 +45,7 @@
 //! |---|---|---|
 //! | `channel_size` | 1024 | Broadcast channel capacity for WS events. Overflow yields [`EventStreamError::Lagging`]. |
 //! | `chunk_size` | 1024 | Blocks per `eth_getLogs` request during backfill. Smaller = smaller RPC responses; larger = fewer round-trips. |
-//! | `new_head_timeout` | 30 s | Max wait for `confirmations_after_sync_block` block headers from WS. |
+//! | `new_head_timeout` | 1 min | Max wait for `confirmations_after_sync_block` block headers from WS. |
 //! | `sync_timeout` | 20 s | Max wait for HTTP provider to reach the cutoff block. |
 //! | `sync_poll_interval` | 2 s | Interval between `get_block_number` polls during HTTP/WS sync. |
 //! | `confirmations_after_sync_block` | 5 | Block headers to observe from WS before starting backfill. First header sets the cutoff; the rest are wait time. |
@@ -62,8 +62,8 @@
 //! * [`EventStreamError`] – errors produced while building or consuming the
 //!   stream.
 
-use core::fmt;
-use std::{num::NonZeroUsize, time::Duration};
+use std::ops::RangeInclusive;
+use std::{fmt, num::NonZeroUsize, time::Duration};
 
 use alloy::{
     eips::BlockNumberOrTag,
@@ -210,39 +210,85 @@ pub struct EventStreamBuilder<T> {
     config: EventStreamConfig,
 }
 
-/// Optional configuration for [`EventStreamBuilder`].
+/// Configuration for [`EventStreamBuilder`].
 ///
-/// Every field defaults to `None`, which makes the builder use its
-/// built-in default (see the [module-level defaults table](self#builder-defaults)).
-/// The struct derives [`Deserialize`] so it can be loaded from a config
-/// file and passed to [`EventStreamBuilder::with_config`].
+/// Every field has a built-in default (see the [module-level defaults
+/// table](self#builder-defaults)). The struct derives [`Deserialize`] so
+/// it can be loaded from a config file and passed to
+/// [`EventStreamBuilder::with_config`].
 #[non_exhaustive]
-#[derive(Debug, Default, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct EventStreamConfig {
     /// See [`EventStreamBuilder::skip_backfill`].
     #[serde(default)]
     pub skip_backfill: SkipBackfill,
     /// See [`EventStreamBuilder::channel_size`].
-    #[serde(default)]
-    pub channel_size: Option<NonZeroUsize>,
+    #[serde(default = "EventStreamConfig::default_channel_size")]
+    pub channel_size: NonZeroUsize,
     /// See [`EventStreamBuilder::chunk_size`].
-    #[serde(default)]
-    pub chunk_size: Option<NonZeroUsize>,
+    #[serde(default = "EventStreamConfig::default_chunk_size")]
+    pub chunk_size: NonZeroUsize,
     /// See [`EventStreamBuilder::new_head_timeout`].
-    #[serde(default)]
+    #[serde(default = "EventStreamConfig::default_new_head_timeout")]
     #[serde(with = "humantime_serde")]
-    pub new_head_timeout: Option<Duration>,
+    pub new_head_timeout: Duration,
     /// See [`EventStreamBuilder::sync_timeout`].
-    #[serde(default)]
+    #[serde(default = "EventStreamConfig::default_sync_timeout")]
     #[serde(with = "humantime_serde")]
-    pub sync_timeout: Option<Duration>,
+    pub sync_timeout: Duration,
     /// See [`EventStreamBuilder::sync_poll_interval`].
-    #[serde(default)]
+    #[serde(default = "EventStreamConfig::default_sync_poll_interval")]
     #[serde(with = "humantime_serde")]
-    pub sync_poll_interval: Option<Duration>,
+    pub sync_poll_interval: Duration,
     /// See [`EventStreamBuilder::confirmations_after_sync_block`].
-    #[serde(default)]
-    pub confirmations_after_sync_block: Option<NonZeroUsize>,
+    #[serde(default = "EventStreamConfig::default_confirmations_after_sync_block")]
+    pub confirmations_after_sync_block: NonZeroUsize,
+}
+
+impl EventStreamConfig {
+    /// Creates a new configuration using default settings.
+    #[must_use]
+    pub fn with_default_values() -> Self {
+        Self::default()
+    }
+
+    fn default_channel_size() -> NonZeroUsize {
+        NonZeroUsize::new(1024).expect("1024 is non-zero")
+    }
+
+    fn default_chunk_size() -> NonZeroUsize {
+        NonZeroUsize::new(1024).expect("1024 is non-zero")
+    }
+
+    fn default_new_head_timeout() -> Duration {
+        Duration::from_secs(60)
+    }
+
+    fn default_sync_timeout() -> Duration {
+        Duration::from_secs(20)
+    }
+
+    fn default_sync_poll_interval() -> Duration {
+        Duration::from_secs(2)
+    }
+
+    fn default_confirmations_after_sync_block() -> NonZeroUsize {
+        NonZeroUsize::new(5).expect("5 is non-zero")
+    }
+}
+
+impl Default for EventStreamConfig {
+    fn default() -> Self {
+        Self {
+            skip_backfill: SkipBackfill::default(),
+            channel_size: Self::default_channel_size(),
+            chunk_size: Self::default_chunk_size(),
+            new_head_timeout: Self::default_new_head_timeout(),
+            sync_timeout: Self::default_sync_timeout(),
+            sync_poll_interval: Self::default_sync_poll_interval(),
+            confirmations_after_sync_block: Self::default_confirmations_after_sync_block(),
+        }
+    }
 }
 
 impl<T> EventStreamBuilder<T>
@@ -301,15 +347,15 @@ where
     /// Sets the timeout for waiting on the next block header from the WS
     /// provider when determining the backfill cutoff.
     #[must_use]
-    pub fn new_head_timeout<O: Into<Option<Duration>>>(mut self, new_head_timeout: O) -> Self {
-        self.config.new_head_timeout = new_head_timeout.into();
+    pub fn new_head_timeout(mut self, new_head_timeout: Duration) -> Self {
+        self.config.new_head_timeout = new_head_timeout;
         self
     }
 
     /// Sets the timeout for waiting until WS and HTTP are synced.
     #[must_use]
-    pub fn sync_timeout<O: Into<Option<Duration>>>(mut self, sync_timeout: O) -> Self {
-        self.config.sync_timeout = sync_timeout.into();
+    pub fn sync_timeout(mut self, sync_timeout: Duration) -> Self {
+        self.config.sync_timeout = sync_timeout;
         self
     }
 
@@ -317,8 +363,8 @@ where
     ///
     /// This is used for the HTTP provider to poll the current block to synchronize with the WS provider cutoff block.
     #[must_use]
-    pub fn sync_poll_interval<O: Into<Option<Duration>>>(mut self, sync_poll_interval: O) -> Self {
-        self.config.sync_poll_interval = sync_poll_interval.into();
+    pub fn sync_poll_interval(mut self, sync_poll_interval: Duration) -> Self {
+        self.config.sync_poll_interval = sync_poll_interval;
         self
     }
 
@@ -327,15 +373,15 @@ where
     /// If the consumer falls behind by more than this many events the stream
     /// yields [`EventStreamError::Lagging`].
     #[must_use]
-    pub fn channel_size<O: Into<Option<NonZeroUsize>>>(mut self, channel_size: O) -> Self {
-        self.config.channel_size = channel_size.into();
+    pub fn channel_size(mut self, channel_size: NonZeroUsize) -> Self {
+        self.config.channel_size = channel_size;
         self
     }
 
     /// Sets the block-range chunk size used during backfill.
     #[must_use]
-    pub fn chunk_size<O: Into<Option<NonZeroUsize>>>(mut self, chunk_size: O) -> Self {
-        self.config.chunk_size = chunk_size.into();
+    pub fn chunk_size(mut self, chunk_size: NonZeroUsize) -> Self {
+        self.config.chunk_size = chunk_size;
         self
     }
 
@@ -348,11 +394,11 @@ where
     /// [`EventStreamError::SynchronizingHttpWsTimeout`] but delay the first
     /// log delivery.
     #[must_use]
-    pub fn confirmations_after_sync_block<O: Into<Option<NonZeroUsize>>>(
+    pub fn confirmations_after_sync_block(
         mut self,
-        confirmations_after_sync_block: O,
+        confirmations_after_sync_block: NonZeroUsize,
     ) -> Self {
-        self.config.confirmations_after_sync_block = confirmations_after_sync_block.into();
+        self.config.confirmations_after_sync_block = confirmations_after_sync_block;
         self
     }
 
@@ -371,14 +417,6 @@ where
     ///   block headers from the WS provider.
     /// - [`EventStreamError::SynchronizingHttpWsTimeout`] — HTTP provider
     ///   did not reach the cutoff block in time.
-    #[allow(
-        clippy::missing_panics_doc,
-        reason = "Can actually not panic as default values are non-zero"
-    )]
-    #[allow(
-        clippy::too_many_lines,
-        reason = "Resolving Option defaults adds lines but keeps the method cohesive"
-    )]
     pub async fn build(
         self,
     ) -> Result<impl Stream<Item = Result<Log, EventStreamError>>, EventStreamError> {
@@ -401,14 +439,6 @@ where
             confirmations_after_sync_block,
         } = config;
 
-        let channel_size =
-            channel_size.unwrap_or(NonZeroUsize::new(1024).expect("1024 is non-zero"));
-        let chunk_size = chunk_size.unwrap_or(NonZeroUsize::new(1024).expect("1024 is non-zero"));
-        let new_head_timeout = new_head_timeout.unwrap_or(Duration::from_secs(30));
-        let sync_timeout = sync_timeout.unwrap_or(Duration::from_secs(20));
-        let sync_poll_interval = sync_poll_interval.unwrap_or(Duration::from_secs(2));
-        let confirmations_after_sync_block =
-            confirmations_after_sync_block.unwrap_or(NonZeroUsize::new(5).expect("5 is non-zero"));
         let topic = topic.into();
         let subscription = ws_provider
             .subscribe_logs(
@@ -472,11 +502,10 @@ where
             backfill_cutoff,
             chunk_size,
         ))
-        .then(move |(from, to)| {
+        .then(move |range| {
             fetch_logs(
                 contract_address,
-                from,
-                to,
+                range,
                 http_provider.clone(),
                 topic.clone(),
                 chain_cursor,
@@ -522,17 +551,16 @@ fn block_ranges(
     start: u64,
     end: u64,
     chunk_size: NonZeroUsize,
-) -> impl Iterator<Item = (u64, u64)> {
+) -> impl Iterator<Item = RangeInclusive<u64>> {
     let chunk_size_u64 = u64::try_from(chunk_size.get()).expect("usize should fit into u64");
     (start..=end)
         .step_by(chunk_size.get())
-        .map(move |from| (from, from.saturating_add(chunk_size_u64 - 1).min(end)))
+        .map(move |from| from..=from.saturating_add(chunk_size_u64 - 1).min(end))
 }
 
 async fn fetch_logs(
     contract_address: Address,
-    from: u64,
-    to: u64,
+    range: RangeInclusive<u64>,
     http_provider: web3::HttpRpcProvider,
     event_signature: FilterSet<FixedBytes<32>>,
     chain_cursor: ChainCursor,
@@ -540,12 +568,12 @@ async fn fetch_logs(
     tracing::trace!("fetching logs!");
     let filter = Filter::new()
         .address(contract_address)
-        .from_block(BlockNumberOrTag::Number(from))
-        .to_block(BlockNumberOrTag::Number(to))
+        .from_block(BlockNumberOrTag::Number(*range.start()))
+        .to_block(BlockNumberOrTag::Number(*range.end()))
         .event_signature(event_signature);
-    let logs = http_provider.get_logs(&filter).await?;
+    tracing::trace!("get logs for range: {range:?}");
 
-    tracing::trace!("from {from} to {to}");
+    let logs = http_provider.get_logs(&filter).await?;
     tracing::trace!("got {} logs", logs.len());
 
     logs.into_iter()
@@ -773,7 +801,7 @@ mod tests {
         };
         let mut stream = h
             .builder(cursor)
-            .chunk_size(Some(NonZeroUsize::try_from(1).expect("1 is non-zero")))
+            .chunk_size(NonZeroUsize::try_from(1).expect("1 is non-zero"))
             .build()
             .await?;
 
@@ -825,7 +853,7 @@ mod tests {
         let cursor = ChainCursor::new(0, 1);
         let mut stream = h
             .builder(cursor)
-            .channel_size(Some(NonZeroUsize::try_from(1).expect("1 is non-zero")))
+            .channel_size(NonZeroUsize::try_from(1).expect("1 is non-zero"))
             .build()
             .await?;
 
@@ -902,21 +930,21 @@ mod tests {
     fn test_block_ranges_chunk_size_one() {
         let ranges: Vec<_> =
             block_ranges(0, 3, NonZeroUsize::new(1).expect("1 is non-zero")).collect();
-        assert_eq!(ranges, vec![(0, 0), (1, 1), (2, 2), (3, 3)]);
+        assert_eq!(ranges, vec![0..=0, 1..=1, 2..=2, 3..=3]);
     }
 
     #[test]
     fn test_block_ranges_chunk_larger_than_range() {
         let ranges: Vec<_> =
             block_ranges(5, 8, NonZeroUsize::new(100).expect("100 is non-zero")).collect();
-        assert_eq!(ranges, vec![(5, 8)]);
+        assert_eq!(ranges, vec![5..=8]);
     }
 
     #[test]
     fn test_block_ranges_exact_multiple() {
         let ranges: Vec<_> =
             block_ranges(0, 3, NonZeroUsize::new(2).expect("2 is non-zero")).collect();
-        assert_eq!(ranges, vec![(0, 1), (2, 3)]);
+        assert_eq!(ranges, vec![0..=1, 2..=3]);
     }
 
     #[test]
@@ -946,7 +974,7 @@ mod tests {
     fn test_block_ranges_single_block() {
         let ranges: Vec<_> =
             block_ranges(5, 5, NonZeroUsize::new(10).expect("10 is non-zero")).collect();
-        assert_eq!(ranges, vec![(5, 5)]);
+        assert_eq!(ranges, vec![5..=5]);
     }
 
     #[tokio::test]
@@ -960,7 +988,7 @@ mod tests {
         let cursor = ChainCursor::new(1, 0);
         let result = h
             .builder(cursor)
-            .new_head_timeout(Some(Duration::from_millis(100)))
+            .new_head_timeout(Duration::from_millis(100))
             .build()
             .await;
 
@@ -1006,8 +1034,8 @@ mod tests {
             ws_provider,
             vec![TestEmitter::TestEvent::SIGNATURE_HASH],
         )
-        .sync_timeout(Some(Duration::from_millis(200)))
-        .sync_poll_interval(Some(Duration::from_millis(50)))
+        .sync_timeout(Duration::from_millis(200))
+        .sync_poll_interval(Duration::from_millis(50))
         .build()
         .await;
 
