@@ -220,18 +220,28 @@ pub struct EventStreamBuilder<T> {
 #[derive(Debug, Default, Clone, Deserialize)]
 pub struct EventStreamConfig {
     /// See [`EventStreamBuilder::skip_backfill`].
-    pub skip_backfill: Option<SkipBackfill>,
+    #[serde(default)]
+    pub skip_backfill: SkipBackfill,
     /// See [`EventStreamBuilder::channel_size`].
+    #[serde(default)]
     pub channel_size: Option<NonZeroUsize>,
     /// See [`EventStreamBuilder::chunk_size`].
+    #[serde(default)]
     pub chunk_size: Option<NonZeroUsize>,
     /// See [`EventStreamBuilder::new_head_timeout`].
+    #[serde(default)]
+    #[serde(with = "humantime_serde")]
     pub new_head_timeout: Option<Duration>,
     /// See [`EventStreamBuilder::sync_timeout`].
+    #[serde(default)]
+    #[serde(with = "humantime_serde")]
     pub sync_timeout: Option<Duration>,
     /// See [`EventStreamBuilder::sync_poll_interval`].
+    #[serde(default)]
+    #[serde(with = "humantime_serde")]
     pub sync_poll_interval: Option<Duration>,
     /// See [`EventStreamBuilder::confirmations_after_sync_block`].
+    #[serde(default)]
     pub confirmations_after_sync_block: Option<NonZeroUsize>,
 }
 
@@ -283,8 +293,8 @@ where
 
     /// Sets whether historical backfill should be skipped.
     #[must_use]
-    pub fn skip_backfill<O: Into<Option<SkipBackfill>>>(mut self, skip_backfill: O) -> Self {
-        self.config.skip_backfill = skip_backfill.into();
+    pub fn skip_backfill(mut self, skip_backfill: SkipBackfill) -> Self {
+        self.config.skip_backfill = skip_backfill;
         self
     }
 
@@ -391,7 +401,6 @@ where
             confirmations_after_sync_block,
         } = config;
 
-        let skip_backfill = skip_backfill.unwrap_or(SkipBackfill::No);
         let channel_size =
             channel_size.unwrap_or(NonZeroUsize::new(1024).expect("1024 is non-zero"));
         let chunk_size = chunk_size.unwrap_or(NonZeroUsize::new(1024).expect("1024 is non-zero"));
