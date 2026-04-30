@@ -9,6 +9,50 @@
 //! A [`ChainCursor`] tracks the last-processed position on chain so that
 //! backfill resumes from the correct block and log index.
 //!
+//! # Stream flow
+//!
+//! When [`EventStreamBuilder::build`] is called the following steps are
+//! executed in order:
+//!
+//! 1. **Subscribe to live logs** — calls `eth_subscribe("logs")` on the WS
+//!    provider filtered by contract address and event topic, starting from
+//!    `Latest`. Events are buffered in a broadcast channel of size
+//!    `channel_size`.
+//! 2. **Check for early return** — if the cursor is at genesis (block 0,
+//!    index 0) or `skip_backfill` is `Yes`, the live WS stream is returned
+//!    immediately with no backfill.
+//! 3. **Determine the backfill cutoff** — subscribes to new block headers on
+//!    the WS provider and waits for `confirmations_after_sync_block` headers.
+//!    The **first** header's block number becomes the **backfill cutoff**.
+//!    The additional headers give the HTTP provider time to reach the same
+//!    block. This step is bounded by `new_head_timeout`; exceeding it yields
+//!    [`EventStreamError::CannotFetchHead`].
+//! 4. **Synchronize HTTP with WS** — polls `get_block_number` on the HTTP
+//!    provider every `sync_poll_interval` until it reports a block number
+//!    ≥ the cutoff. Bounded by `sync_timeout`; exceeding it yields
+//!    [`EventStreamError::SynchronizingHttpWsTimeout`].
+//! 5. **Backfill historical logs** — fetches logs over HTTP from
+//!    `cursor.block` to the cutoff in chunks of `chunk_size` blocks via
+//!    `eth_getLogs`. Logs whose `(block_number, log_index)` is at or before
+//!    the cursor position are filtered out.
+//! 6. **Chain backfill with live stream** — the backfill stream is chained
+//!    with the WS stream. The WS stream drops any log whose block number
+//!    ≤ the cutoff to avoid duplicates with the backfill.
+//!
+//! # Builder defaults
+//!
+//! | Parameter | Default | Effect |
+//! |---|---|---|
+//! | `channel_size` | 1024 | Broadcast channel capacity for WS events. Overflow yields [`EventStreamError::Lagging`]. |
+//! | `chunk_size` | 1024 | Blocks per `eth_getLogs` request during backfill. Smaller = smaller RPC responses; larger = fewer round-trips. |
+//! | `new_head_timeout` | 20 s | Max wait for `confirmations_after_sync_block` block headers from WS. |
+//! | `sync_timeout` | 20 s | Max wait for HTTP provider to reach the cutoff block. |
+//! | `sync_poll_interval` | 2 s | Interval between `get_block_number` polls during HTTP/WS sync. |
+//! | `confirmations_after_sync_block` | 5 | Block headers to observe from WS before starting backfill. First header sets the cutoff; the rest are wait time. |
+//! | `skip_backfill` | `No` | When `Yes`, skip backfill entirely and deliver only live events. |
+//!
+//! # Public types
+//!
 //! * [`EventStreamBuilder`] – configures and builds the event stream.
 //! * [`ChainCursor`] – tracks the last-processed on-chain position.
 //! * [`SkipBackfill`] – controls whether historical backfill is performed.
@@ -150,7 +194,8 @@ impl From<bool> for SkipBackfill {
 /// Block ranges during backfill are split into configurable chunks to avoid
 /// oversized RPC responses.
 ///
-/// Defaults: `channel_size = 1024`, `chunk_size = 1024`.
+/// See the [module-level documentation](self) for the full flow description
+/// and a table of all configurable defaults.
 pub struct EventStreamBuilder<T> {
     chain_cursor: ChainCursor,
     contract_address: Address,
@@ -163,6 +208,7 @@ pub struct EventStreamBuilder<T> {
     new_head_timeout: Duration,
     sync_timeout: Duration,
     sync_poll_interval: Duration,
+    confirmations_after_sync_block: NonZeroUsize,
 }
 
 impl<T> EventStreamBuilder<T>
@@ -197,6 +243,7 @@ where
             new_head_timeout: Duration::from_secs(20),
             sync_timeout: Duration::from_secs(20),
             sync_poll_interval: Duration::from_secs(2),
+            confirmations_after_sync_block: NonZeroUsize::new(5).expect("5 is non-zero"),
         }
     }
 
@@ -248,16 +295,38 @@ where
         self
     }
 
+    /// Sets the number of new block headers to observe from the WS provider
+    /// before starting the backfill. The first header's block number becomes
+    /// the backfill cutoff; the remaining headers give the HTTP provider time
+    /// to reach the same block.
+    ///
+    /// Higher values reduce the chance of a
+    /// [`EventStreamError::SynchronizingHttpWsTimeout`] but delay the first
+    /// log delivery.
+    #[must_use]
+    pub fn confirmations_after_sync_block(
+        mut self,
+        confirmations_after_sync_block: NonZeroUsize,
+    ) -> Self {
+        self.confirmations_after_sync_block = confirmations_after_sync_block;
+        self
+    }
+
     /// Builds the event stream.
     ///
     /// Subscribes to live events via WebSocket and, unless the cursor is at
     /// genesis or backfill is skipped, fetches historical logs over HTTP
-    /// before chaining them with the live stream.
+    /// before chaining them with the live stream. See the
+    /// [module-level documentation](self) for the full step-by-step flow.
     ///
     /// # Errors
     ///
-    /// Returns [`EventStreamError::TransportError`] if the WebSocket
-    /// subscription or any HTTP backfill request fails.
+    /// - [`EventStreamError::TransportError`] — WS subscription or HTTP
+    ///   log fetch failed.
+    /// - [`EventStreamError::CannotFetchHead`] — timed out waiting for new
+    ///   block headers from the WS provider.
+    /// - [`EventStreamError::SynchronizingHttpWsTimeout`] — HTTP provider
+    ///   did not reach the cutoff block in time.
     pub async fn build(
         self,
     ) -> Result<impl Stream<Item = Result<Log, EventStreamError>>, EventStreamError> {
@@ -273,6 +342,7 @@ where
             new_head_timeout,
             sync_timeout,
             sync_poll_interval,
+            confirmations_after_sync_block,
         } = self;
         let topic = topic.into();
         let subscription = ws_provider
@@ -304,15 +374,25 @@ where
         // get_block_number — the two providers may not agree on the same block, and
         // using HTTP risks missing blocks. This way we know at least that the node
         // serving the WS has already seen this header.
+        //
+        // We also take additionally confirmations_after_sync_block headers afterwards. The additional wait time increases the chance that the HTTP and WS provider agree on the block cutoff.
         let backfill_cutoff = tokio::time::timeout(new_head_timeout, async {
-            ws_provider
-                .subscribe_blocks()
-                .await?
-                .into_stream()
-                .next()
-                .await
-                .ok_or(EventStreamError::CannotFetchHead)
-                .map(|h| h.number)
+            #[allow(
+                clippy::missing_panics_doc,
+                reason = "Can not panic as we collect with NonZero value"
+            )]
+            Ok::<_, EventStreamError>(
+                *ws_provider
+                    .subscribe_blocks()
+                    .await?
+                    .into_stream()
+                    .take(confirmations_after_sync_block.get())
+                    .map(|h| h.number)
+                    .collect::<Vec<_>>()
+                    .await
+                    .first()
+                    .expect("Is at least one"),
+            )
         })
         .await
         .map_err(|_| EventStreamError::CannotFetchHead)??;
