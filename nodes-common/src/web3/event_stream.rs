@@ -56,6 +56,9 @@
 //! * [`EventStreamBuilder`] – configures and builds the event stream.
 //! * [`ChainCursor`] – tracks the last-processed on-chain position.
 //! * [`SkipBackfill`] – controls whether historical backfill is performed.
+//! * [`OptionalEventStreamConfig`] – optional configuration values; can be
+//!   deserialized from a config file and applied in bulk via
+//!   [`EventStreamBuilder::set_optional_values`].
 //! * [`EventStreamError`] – errors produced while building or consuming the
 //!   stream.
 
@@ -72,6 +75,7 @@ use futures::{
     Stream,
     stream::{self, StreamExt, TryStreamExt},
 };
+use serde::Deserialize;
 use tokio::sync::broadcast::error::RecvError;
 
 use crate::web3;
@@ -162,11 +166,12 @@ impl ChainCursor {
 
 /// Controls whether historical backfill is skipped when building an event
 /// stream.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
 #[allow(
     clippy::exhaustive_enums,
     reason = "Enum is either yes or no - not planned to extend this"
 )]
+#[serde(rename_all = "lowercase")]
 pub enum SkipBackfill {
     /// Skip backfill; only receive live events.
     Yes,
@@ -201,14 +206,33 @@ pub struct EventStreamBuilder<T> {
     contract_address: Address,
     http_provider: web3::HttpRpcProvider,
     ws_provider: DynProvider,
-    skip_backfill: Option<SkipBackfill>,
     topic: T,
-    channel_size: Option<NonZeroUsize>,
-    chunk_size: Option<NonZeroUsize>,
-    new_head_timeout: Option<Duration>,
-    sync_timeout: Option<Duration>,
-    sync_poll_interval: Option<Duration>,
-    confirmations_after_sync_block: Option<NonZeroUsize>,
+    optional_values: OptionalEventStreamConfig,
+}
+
+/// Optional configuration for [`EventStreamBuilder`].
+///
+/// Every field defaults to `None`, which makes the builder use its
+/// built-in default (see the [module-level defaults table](self#builder-defaults)).
+/// The struct derives [`Deserialize`] so it can be loaded from a config
+/// file and passed to [`EventStreamBuilder::set_optional_values`].
+#[non_exhaustive]
+#[derive(Debug, Default, Clone, Deserialize)]
+pub struct OptionalEventStreamConfig {
+    /// See [`EventStreamBuilder::skip_backfill`].
+    pub skip_backfill: Option<SkipBackfill>,
+    /// See [`EventStreamBuilder::channel_size`].
+    pub channel_size: Option<NonZeroUsize>,
+    /// See [`EventStreamBuilder::chunk_size`].
+    pub chunk_size: Option<NonZeroUsize>,
+    /// See [`EventStreamBuilder::new_head_timeout`].
+    pub new_head_timeout: Option<Duration>,
+    /// See [`EventStreamBuilder::sync_timeout`].
+    pub sync_timeout: Option<Duration>,
+    /// See [`EventStreamBuilder::sync_poll_interval`].
+    pub sync_poll_interval: Option<Duration>,
+    /// See [`EventStreamBuilder::confirmations_after_sync_block`].
+    pub confirmations_after_sync_block: Option<NonZeroUsize>,
 }
 
 impl<T> EventStreamBuilder<T>
@@ -233,35 +257,29 @@ where
             http_provider,
             ws_provider,
             topic,
-            skip_backfill: None,
-            channel_size: None,
-            chunk_size: None,
-            new_head_timeout: None,
-            sync_timeout: None,
-            sync_poll_interval: None,
-            confirmations_after_sync_block: None,
+            optional_values: OptionalEventStreamConfig::default(),
         }
     }
 
     /// Sets whether historical backfill should be skipped.
     #[must_use]
-    pub fn skip_backfill(mut self, skip_backfill: Option<SkipBackfill>) -> Self {
-        self.skip_backfill = skip_backfill;
+    pub fn skip_backfill<O: Into<Option<SkipBackfill>>>(mut self, skip_backfill: O) -> Self {
+        self.optional_values.skip_backfill = skip_backfill.into();
         self
     }
 
     /// Sets the timeout for waiting on the next block header from the WS
     /// provider when determining the backfill cutoff.
     #[must_use]
-    pub fn new_head_timeout(mut self, new_head_timeout: Option<Duration>) -> Self {
-        self.new_head_timeout = new_head_timeout;
+    pub fn new_head_timeout<O: Into<Option<Duration>>>(mut self, new_head_timeout: O) -> Self {
+        self.optional_values.new_head_timeout = new_head_timeout.into();
         self
     }
 
     /// Sets the timeout for waiting until WS and HTTP are synced.
     #[must_use]
-    pub fn sync_timeout(mut self, sync_timeout: Option<Duration>) -> Self {
-        self.sync_timeout = sync_timeout;
+    pub fn sync_timeout<O: Into<Option<Duration>>>(mut self, sync_timeout: O) -> Self {
+        self.optional_values.sync_timeout = sync_timeout.into();
         self
     }
 
@@ -269,8 +287,8 @@ where
     ///
     /// This is used for the HTTP provider to poll the current block to synchronize with the WS provider cutoff block.
     #[must_use]
-    pub fn sync_poll_interval(mut self, sync_poll_interval: Option<Duration>) -> Self {
-        self.sync_poll_interval = sync_poll_interval;
+    pub fn sync_poll_interval<O: Into<Option<Duration>>>(mut self, sync_poll_interval: O) -> Self {
+        self.optional_values.sync_poll_interval = sync_poll_interval.into();
         self
     }
 
@@ -279,15 +297,15 @@ where
     /// If the consumer falls behind by more than this many events the stream
     /// yields [`EventStreamError::Lagging`].
     #[must_use]
-    pub fn channel_size(mut self, channel_size: Option<NonZeroUsize>) -> Self {
-        self.channel_size = channel_size;
+    pub fn channel_size<O: Into<Option<NonZeroUsize>>>(mut self, channel_size: O) -> Self {
+        self.optional_values.channel_size = channel_size.into();
         self
     }
 
     /// Sets the block-range chunk size used during backfill.
     #[must_use]
-    pub fn chunk_size(mut self, chunk_size: Option<NonZeroUsize>) -> Self {
-        self.chunk_size = chunk_size;
+    pub fn chunk_size<O: Into<Option<NonZeroUsize>>>(mut self, chunk_size: O) -> Self {
+        self.optional_values.chunk_size = chunk_size.into();
         self
     }
 
@@ -300,11 +318,21 @@ where
     /// [`EventStreamError::SynchronizingHttpWsTimeout`] but delay the first
     /// log delivery.
     #[must_use]
-    pub fn confirmations_after_sync_block(
+    pub fn confirmations_after_sync_block<O: Into<Option<NonZeroUsize>>>(
         mut self,
-        confirmations_after_sync_block: Option<NonZeroUsize>,
+        confirmations_after_sync_block: O,
     ) -> Self {
-        self.confirmations_after_sync_block = confirmations_after_sync_block;
+        self.optional_values.confirmations_after_sync_block = confirmations_after_sync_block.into();
+        self
+    }
+
+    /// Replaces all optional configuration at once.
+    ///
+    /// This is useful when the configuration is deserialized from a file
+    /// rather than set field-by-field through the builder methods.
+    #[must_use]
+    pub fn set_optional_values(mut self, optional_values: OptionalEventStreamConfig) -> Self {
+        self.optional_values = optional_values;
         self
     }
 
@@ -339,15 +367,20 @@ where
             contract_address,
             http_provider,
             ws_provider,
-            skip_backfill,
             topic,
+            optional_values,
+        } = self;
+
+        let OptionalEventStreamConfig {
+            skip_backfill,
             channel_size,
             chunk_size,
             new_head_timeout,
             sync_timeout,
             sync_poll_interval,
             confirmations_after_sync_block,
-        } = self;
+        } = optional_values;
+
         let skip_backfill = skip_backfill.unwrap_or(SkipBackfill::No);
         let channel_size =
             channel_size.unwrap_or(NonZeroUsize::new(1024).expect("1024 is non-zero"));
@@ -809,7 +842,7 @@ mod tests {
         };
         let mut stream = h
             .builder(cursor)
-            .skip_backfill(Some(SkipBackfill::Yes))
+            .skip_backfill(SkipBackfill::Yes)
             .build()
             .await?;
 
