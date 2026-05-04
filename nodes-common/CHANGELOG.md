@@ -2,6 +2,25 @@
 
 ## [Unreleased]
 
+## [0.5.2](https://github.com/TaceoLabs/nodes-helpers/compare/taceo-nodes-common-v0.5.1...taceo-nodes-common-v0.5.2)
+
+### ⛰️ Features
+
+
+- *(common)* Add event stream module for backfill ([#34](https://github.com/TaceoLabs/nodes-helpers/pull/34)) - ([3e3df42](https://github.com/TaceoLabs/nodes-helpers/commit/3e3df422b042df1113c993fa0efbbbf9be0df188))
+
+### 🏗️ Build
+
+
+- *(deps)* Make tokio/time feature explicit - ([e8ea611](https://github.com/TaceoLabs/nodes-helpers/commit/e8ea61133ceca78b5a908aba5a742fb4f6df710b))
+- *(deps)* Disable default features for axum, tower, tracing-subscriber - ([84994b2](https://github.com/TaceoLabs/nodes-helpers/commit/84994b2632d9d0e61805166d89f96348ec4af47b))
+
+### ⚙️ Miscellaneous Tasks
+
+
+- *(test)* Remove redundant auto_mine call ([#37](https://github.com/TaceoLabs/nodes-helpers/pull/37)) - ([d1ad70b](https://github.com/TaceoLabs/nodes-helpers/commit/d1ad70b36b7af61fe524910b7069eff82802089a))
+
+
 ## [0.5.1](https://github.com/TaceoLabs/nodes-helpers/compare/taceo-nodes-common-v0.5.0...taceo-nodes-common-v0.5.1)
 
 ### ⛰️ Features
