@@ -634,7 +634,7 @@ mod tests {
             let anvil = Anvil::new().spawn();
             let signer: PrivateKeySigner = anvil.keys()[0].clone().into();
             let http_provider =
-                HttpRpcProviderBuilder::with_default_values(vec![anvil.endpoint_url()])
+                HttpRpcProviderBuilder::with_default_values([anvil.endpoint_url()])?
                     .environment(Environment::Dev)
                     .wallet(EthereumWallet::from(signer))
                     .chain_id(31_337)
@@ -1015,7 +1015,7 @@ mod tests {
 
         let signer: PrivateKeySigner = anvil_http.keys()[0].clone().into();
         let http_provider =
-            HttpRpcProviderBuilder::with_default_values(vec![anvil_http.endpoint_url()])
+            HttpRpcProviderBuilder::with_default_values([anvil_http.endpoint_url()])?
                 .environment(Environment::Dev)
                 .wallet(EthereumWallet::from(signer))
                 .chain_id(31_337)

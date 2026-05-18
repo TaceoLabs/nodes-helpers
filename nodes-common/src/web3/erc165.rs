@@ -551,22 +551,20 @@ mod tests {
             .expect("Should be able to deploy with RPC provider")
             .address();
 
-        let http_rpc_provider =
-            HttpRpcProviderBuilder::with_config(&HttpRpcProviderConfig::with_default_values(vec![
-                "http://localhost:1234"
-                    .parse()
-                    .expect("Should be valid URL"),
-            ]))
-            .environment(Environment::Dev)
-            // turn down retry policy as this will always fail
-            .retry_policy(web3::RetryPolicyConfig {
-                min_delay: Duration::from_secs(1),
-                max_delay: Duration::from_secs(1),
-                max_times: 1,
-            })
-            .chain_id(31_337)
-            .build()
-            .expect("Should be able to configure HTTP provider");
+        let http_rpc_provider = HttpRpcProviderBuilder::with_config(
+            &HttpRpcProviderConfig::with_default_values(["http://localhost:1234"])
+                .expect("Should be valid URL"),
+        )
+        .environment(Environment::Dev)
+        // turn down retry policy as this will always fail
+        .retry_policy(web3::RetryPolicyConfig {
+            min_delay: Duration::from_secs(1),
+            max_delay: Duration::from_secs(1),
+            max_times: 1,
+        })
+        .chain_id(31_337)
+        .build()
+        .expect("Should be able to configure HTTP provider");
 
         let (is_erc165_conform, support_interface, support_interface_unchecked) = tokio::join!(
             http_rpc_provider.ensure_erc165_conform(selector_address),

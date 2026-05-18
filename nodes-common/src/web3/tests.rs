@@ -110,11 +110,11 @@ pub(crate) enum WithWallet {
 
 pub(crate) fn http_fixture(with_wallet: WithWallet) -> (AnvilInstance, HttpRpcProvider) {
     let anvil = Anvil::new().spawn();
-    let mut http_provider_builder =
-        HttpRpcProviderBuilder::with_config(&HttpRpcProviderConfig::with_default_values(vec![
-            anvil.endpoint_url(),
-        ]))
-        .environment(Environment::Dev);
+    let mut http_provider_builder = HttpRpcProviderBuilder::with_config(
+        &HttpRpcProviderConfig::with_default_values([anvil.endpoint_url()])
+            .expect("anvil endpoint URL is always valid"),
+    )
+    .environment(Environment::Dev);
     if with_wallet == WithWallet::Yes {
         http_provider_builder =
             http_provider_builder.wallet(anvil.wallet().expect("anvil should have a wallet"));
@@ -139,7 +139,8 @@ fn build_test_http_provider(
     timeout: Duration,
     retry_policy_config: super::RetryPolicyConfig,
 ) -> HttpRpcProvider {
-    let mut config = HttpRpcProviderConfig::with_default_values(http_urls);
+    let mut config =
+        HttpRpcProviderConfig::with_default_values(http_urls).expect("test URLs are always valid");
     config.timeout = timeout;
     config.retry_policy_config = retry_policy_config;
     HttpRpcProviderBuilder::with_config(&config)
