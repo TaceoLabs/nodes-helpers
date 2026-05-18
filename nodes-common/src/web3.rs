@@ -32,7 +32,7 @@ use alloy::{
         RpcError, Transport, TransportError, TransportErrorKind, TransportFut,
         http::{
             Http,
-            reqwest::{self, Url},
+            reqwest::{self, IntoUrl, Url},
         },
         layers::{FallbackLayer, OrRetryPolicyFn, RateLimitRetryPolicy, RetryPolicy},
     },
@@ -118,15 +118,26 @@ pub struct RetryPolicyConfig {
 
 impl HttpRpcProviderConfig {
     /// Creates a new configuration using default retry settings.
-    #[must_use]
-    pub fn with_default_values(http_urls: Vec<Url>) -> Self {
-        Self {
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if any of the provided URLs cannot be parsed.
+    pub fn with_default_values<I, U>(http_urls: I) -> reqwest::Result<Self>
+    where
+        I: IntoIterator<Item = U>,
+        U: IntoUrl,
+    {
+        let http_urls = http_urls
+            .into_iter()
+            .map(U::into_url)
+            .collect::<reqwest::Result<Vec<_>>>()?;
+        Ok(Self {
             http_urls,
             timeout: Self::default_timeout(),
             confirmations_poll_interval: None,
             chain_id: None,
             retry_policy_config: RetryPolicyConfig::default(),
-        }
+        })
     }
 
     /// Default timeout for HTTP requests to the RPC: 10 seconds
@@ -263,19 +274,26 @@ impl HttpRpcProviderBuilder {
 
     /// Creates a new builder using default retry settings.
     ///
+    /// # Errors
+    ///
+    /// Returns an error if any of the provided URLs cannot be parsed.
+    ///
     /// # Example
     ///
     /// ```
-    /// use alloy::transports::http::reqwest::Url;
     /// use taceo_nodes_common::web3::HttpRpcProviderBuilder;
     ///
-    /// let builder = HttpRpcProviderBuilder::with_default_values(vec![
-    ///     Url::parse("http://127.0.0.1:8545").unwrap(),
-    /// ]);
+    /// let builder = HttpRpcProviderBuilder::with_default_values(["http://127.0.0.1:8545"])?;
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
-    #[must_use]
-    pub fn with_default_values(http_urls: Vec<Url>) -> Self {
-        Self::with_config(&HttpRpcProviderConfig::with_default_values(http_urls))
+    pub fn with_default_values<I, U>(http_urls: I) -> reqwest::Result<Self>
+    where
+        I: IntoIterator<Item = U>,
+        U: IntoUrl,
+    {
+        Ok(Self::with_config(
+            &HttpRpcProviderConfig::with_default_values(http_urls)?,
+        ))
     }
 
     /// Configures the environment used by the provider.
