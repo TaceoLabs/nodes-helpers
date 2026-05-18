@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+## [0.6.0](https://github.com/TaceoLabs/nodes-helpers/compare/taceo-nodes-common-v0.5.2...taceo-nodes-common-v0.6.0)
+
+### ⛰️ Features
+
+
+- *(common)* [**breaking**] Accept impl IntoUrl in HttpRpcProvider constructors ([#38](https://github.com/TaceoLabs/nodes-helpers/pull/38)) - ([b40988b](https://github.com/TaceoLabs/nodes-helpers/commit/b40988b849b8197dac0dd29ab221aaef5e6ed346))
+
+
 ## [0.5.2](https://github.com/TaceoLabs/nodes-helpers/compare/taceo-nodes-common-v0.5.1...taceo-nodes-common-v0.5.2)
 
 ### ⛰️ Features
