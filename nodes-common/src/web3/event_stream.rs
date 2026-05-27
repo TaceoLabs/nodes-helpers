@@ -439,6 +439,7 @@ where
             confirmations_after_sync_block,
         } = config;
 
+        let chain_id = http_provider.get_chain_id().await?;
         let topic = topic.into();
         let subscription = ws_provider
             .subscribe_logs(
@@ -457,7 +458,10 @@ where
                 Err(RecvError::Closed) => None,
             }
         });
-        if chain_cursor.is_genesis() {
+
+        // If the chain id is NOT Anvil we don't start at current block unless we manually specify `SkipBackfill::Yes`
+        // We almost always start from genesis on Anvil and therefore want to backfill the events that happened before we subscribed.
+        if chain_cursor.is_genesis() && chain_id != 31_337 {
             tracing::debug!("chain event cursor is genesis - starting at current block");
             return Ok(ws_stream.boxed());
         } else if skip_backfill == SkipBackfill::Yes {
@@ -631,13 +635,17 @@ mod tests {
 
     impl TestHarness {
         async fn new() -> eyre::Result<Self> {
-            let anvil = Anvil::new().spawn();
+            Self::with_chain_id(31_337).await
+        }
+
+        async fn with_chain_id(chain_id: u64) -> eyre::Result<Self> {
+            let anvil = Anvil::new().chain_id(chain_id).spawn();
             let signer: PrivateKeySigner = anvil.keys()[0].clone().into();
             let http_provider =
                 HttpRpcProviderBuilder::with_default_values([anvil.endpoint_url()])?
                     .environment(Environment::Dev)
                     .wallet(EthereumWallet::from(signer))
-                    .chain_id(31_337)
+                    .chain_id(chain_id)
                     .build()?;
             let ws_provider = ProviderBuilder::new()
                 .connect_ws(WsConnect::new(anvil.ws_endpoint()))
@@ -955,7 +963,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_genesis_cursor_starts_from_now() -> eyre::Result<()> {
-        let h = TestHarness::new().await?;
+        // For non-Anvil chains we start at the current block if the cursor is at genesis.
+        let h = TestHarness::with_chain_id(1).await?;
 
         h.emit_event(1).await?;
         h.emit_event(2).await?;
