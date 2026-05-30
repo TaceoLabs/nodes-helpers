@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+## [0.6.0](https://github.com/TaceoLabs/nodes-helpers/compare/taceo-nodes-common-v0.5.2...taceo-nodes-common-v0.6.0)
+
+### ⛰️ Features
+
+
+- *(common)* Allow backfill from genesis on Anvil chain ([#40](https://github.com/TaceoLabs/nodes-helpers/pull/40)) - ([50b0a5f](https://github.com/TaceoLabs/nodes-helpers/commit/50b0a5fea699eb4870f6755307836bc31f77de6e))
+- *(common)* [**breaking**] Accept impl IntoUrl in HttpRpcProvider constructors ([#38](https://github.com/TaceoLabs/nodes-helpers/pull/38)) - ([b40988b](https://github.com/TaceoLabs/nodes-helpers/commit/b40988b849b8197dac0dd29ab221aaef5e6ed346))
+
+
 ## [0.5.2](https://github.com/TaceoLabs/nodes-helpers/compare/taceo-nodes-common-v0.5.1...taceo-nodes-common-v0.5.2)
 
 ### ⛰️ Features
