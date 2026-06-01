@@ -2,12 +2,12 @@
 
 ## [Unreleased]
 
-## [0.6.1](https://github.com/TaceoLabs/nodes-helpers/compare/taceo-nodes-common-v0.6.0...taceo-nodes-common-v0.6.1)
+## [0.7.0](https://github.com/TaceoLabs/nodes-helpers/compare/taceo-nodes-common-v0.6.0...taceo-nodes-common-v0.7.0)
 
 ### 🐛 Bug Fixes
 
 
-- *(common)* Add wrapper type to not print RPC URLs in config struct ([#41](https://github.com/TaceoLabs/nodes-helpers/pull/41)) - ([ed88db5](https://github.com/TaceoLabs/nodes-helpers/commit/ed88db58a586939bc083a8bbbeb2a2e54061183e))
+- *(common)* [**breaking**] Add wrapper type to not print RPC URLs in config struct ([#41](https://github.com/TaceoLabs/nodes-helpers/pull/41)) - ([ed88db5](https://github.com/TaceoLabs/nodes-helpers/commit/ed88db58a586939bc083a8bbbeb2a2e54061183e))
 
 
 ## [0.6.0](https://github.com/TaceoLabs/nodes-helpers/compare/taceo-nodes-common-v0.5.2...taceo-nodes-common-v0.6.0)
