@@ -10,6 +10,7 @@
 //! Use [`HttpRpcProviderBuilder`] to build an HTTP RPC provider.
 //! HTTP transports are wrapped with retry and fallback layers to improve
 //! reliability when interacting with RPC endpoints.
+use core::fmt;
 use std::{
     num::NonZeroUsize,
     ops::Deref,
@@ -53,6 +54,19 @@ pub mod event_stream;
 #[derive(Clone)]
 pub struct HttpRpcProvider(DynProvider);
 
+/// Helper struct to redact the URLs when debug printing the config.
+///
+/// We don't use secret-string, because we want URL validation during config deserialization to fail early.
+#[derive(Clone, Deserialize)]
+#[serde(transparent)]
+pub struct UrlRedacted(Url);
+
+impl fmt::Debug for UrlRedacted {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("[REDACTED]")
+    }
+}
+
 /// Configuration for building an [`HttpRpcProvider`].
 ///
 /// Multiple HTTP endpoints can be provided to enable automatic failover.
@@ -63,7 +77,7 @@ pub struct HttpRpcProviderConfig {
     /// List of HTTP RPC endpoints used for requests.
     ///
     /// Uses alloy's [`FallbackService`](https://docs.rs/alloy/latest/alloy/providers/transport/layers/struct.FallbackLayer.html) and configures each endpoint as one potential transport.
-    pub http_urls: Vec<Url>,
+    pub http_urls: Vec<UrlRedacted>,
     /// Optional chain ID used by the provider.
     ///
     /// If provided, the [`ChainIdFiller`] will automatically populate
@@ -129,7 +143,7 @@ impl HttpRpcProviderConfig {
     {
         let http_urls = http_urls
             .into_iter()
-            .map(U::into_url)
+            .map(|x| x.into_url().map(UrlRedacted))
             .collect::<reqwest::Result<Vec<_>>>()?;
         Ok(Self {
             http_urls,
@@ -230,7 +244,7 @@ fn http_retry_policy() -> OrRetryPolicyFn {
 /// The builder configures retry behavior, fallback transports, optional
 /// wallet integration, and provider fillers before creating the provider.
 pub struct HttpRpcProviderBuilder {
-    http_urls: Vec<Url>,
+    http_urls: Vec<UrlRedacted>,
     retry_policy_config: RetryPolicyConfig,
     chain_id: Option<ChainId>,
     timeout: Duration,
@@ -381,7 +395,7 @@ impl HttpRpcProviderBuilder {
 
         let transports = http_urls
             .into_iter()
-            .map(|url| Http::with_client(reqwest.clone(), url))
+            .map(|url| Http::with_client(reqwest.clone(), url.0))
             .collect::<Vec<_>>();
         let transport = build_transport_stack(transports, &retry_policy_config);
 
