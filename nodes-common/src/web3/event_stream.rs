@@ -409,6 +409,13 @@ where
     /// before chaining them with the live stream. See the
     /// [module-level documentation](self) for the full step-by-step flow.
     ///
+    /// # Note
+    /// This method subscribes to `newHeads` to get the current cutoff for reading
+    /// events. Afterwards it unsubscribes the `newHeads` subscription again. Due to
+    /// how alloy implements subscriptions, all `newHeads` subscriptions on the
+    /// provided `ws_provider` will also be cancelled. If this is not acceptable build
+    /// a new `Provider` for this call.
+    ///
     /// # Errors
     ///
     /// - [`EventStreamError::TransportError`] — WS subscription or HTTP
@@ -475,10 +482,15 @@ where
         // serving the WS has already seen this header.
         //
         // We also take additionally confirmations_after_sync_block headers afterwards. The additional wait time increases the chance that the HTTP and WS provider agree on the block cutoff.
+        //
+        // Subscribe outside the timeout so we always hold the local id and can
+        // unsubscribe afterwards - including when the timeout fires and the
+        // inner future is dropped before we can read it.
+        let block_subscription = ws_provider.subscribe_blocks().await?;
+        let block_sub_id = *block_subscription.local_id();
+
         let backfill_cutoff = tokio::time::timeout(new_head_timeout, async {
-            ws_provider
-                .subscribe_blocks()
-                .await?
+            block_subscription
                 .into_stream()
                 // +1 to actually collect as many blocks AFTER initial block as confirmations_after_sync_block requests
                 .take(confirmations_after_sync_block.get() + 1)
@@ -490,7 +502,14 @@ where
                 .ok_or(EventStreamError::CannotFetchHead)
         })
         .await
-        .map_err(|_| EventStreamError::CannotFetchHead)??;
+        .map_err(|_| EventStreamError::CannotFetchHead);
+
+        // Unsubscribe from newHeads
+        // we don't want to ramp up RPC provider costs if we cannot unsubscribe
+        // therefore we fail
+        ws_provider.unsubscribe(block_sub_id).await?;
+
+        let backfill_cutoff = backfill_cutoff??;
         tracing::debug!("backfill cutoff at block: {backfill_cutoff}");
 
         // now we need to wait until the HTTP provider is also at that specific block number to assure that get_logs will fetch up until the cutoff
