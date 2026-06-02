@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+## [0.7.2](https://github.com/TaceoLabs/nodes-helpers/compare/taceo-nodes-common-v0.7.1...taceo-nodes-common-v0.7.2)
+
+### 🚜 Refactor
+
+
+- *(common)* Try to create schema only during start ([#45](https://github.com/TaceoLabs/nodes-helpers/pull/45)) - ([c5a3bc7](https://github.com/TaceoLabs/nodes-helpers/commit/c5a3bc7884f8997db2b1b6c3e6fd2e5b50a6ca57))
+
+
 ## [0.7.1](https://github.com/TaceoLabs/nodes-helpers/compare/taceo-nodes-common-v0.7.0...taceo-nodes-common-v0.7.1)
 
 ### 🐛 Bug Fixes
