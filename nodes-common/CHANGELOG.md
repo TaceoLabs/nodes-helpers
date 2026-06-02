@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+## [0.7.1](https://github.com/TaceoLabs/nodes-helpers/compare/taceo-nodes-common-v0.7.0...taceo-nodes-common-v0.7.1)
+
+### 🐛 Bug Fixes
+
+
+- *(common)* Now unsubscribes the newHeads for real ([#43](https://github.com/TaceoLabs/nodes-helpers/pull/43)) - ([66296fe](https://github.com/TaceoLabs/nodes-helpers/commit/66296fe25bceb1bce48de8440a6d84830d7e87db))
+
+
 ## [0.7.0](https://github.com/TaceoLabs/nodes-helpers/compare/taceo-nodes-common-v0.6.0...taceo-nodes-common-v0.7.0)
 
 ### 🐛 Bug Fixes
