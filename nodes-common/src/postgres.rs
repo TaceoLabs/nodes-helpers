@@ -67,7 +67,10 @@ use std::{
 use backon::{BackoffBuilder as _, ConstantBuilder, Retryable as _};
 use secrecy::{ExposeSecret as _, SecretString};
 use serde::{Deserialize, Deserializer, de};
-use sqlx::{Executor as _, PgPool, postgres::PgPoolOptions};
+use sqlx::{
+    Connection, Executor as _, PgConnection, PgPool,
+    postgres::{PgConnectOptions, PgPoolOptions},
+};
 
 /// A validated `PostgreSQL` schema name.
 ///
@@ -220,29 +223,31 @@ impl PostgresConfig {
         }
     }
 }
+
 #[must_use]
-#[inline]
-fn schema_connect_with_create(schema: &SanitizedSchema) -> String {
-    format!(
-        r#"
-            CREATE SCHEMA IF NOT EXISTS "{schema}";
-            SET search_path TO "{schema}";
-        "#
-    )
-}
 fn schema_connect(schema: &SanitizedSchema) -> String {
-    format!(
-        r#"
-            SET search_path TO "{schema}";
-        "#
-    )
+    format!("SET search_path TO \"{schema}\";")
+}
+
+async fn maybe_create_schema(config: &PostgresConfig) -> Result<(), sqlx::Error> {
+    let pg_connect_option = config
+        .connection_string
+        .expose_secret()
+        .parse::<PgConnectOptions>()?;
+
+    let mut connection = PgConnection::connect_with(&pg_connect_option).await?;
+    connection
+        .execute(format!("CREATE SCHEMA IF NOT EXISTS \"{}\"", config.schema).as_ref())
+        .await?;
+    connection.close().await?;
+    Ok(())
 }
 
 /// Whether to auto-create the schema if it does not exist.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[allow(clippy::exhaustive_enums, reason = "Is a boolean switch")]
 pub enum CreateSchema {
-    /// Run `CREATE SCHEMA IF NOT EXISTS` before setting the search path.
+    /// Run `CREATE SCHEMA IF NOT EXISTS` on start-up.
     Yes,
     /// Only set the search path; the schema must already exist.
     No,
@@ -251,7 +256,7 @@ pub enum CreateSchema {
 /// Create a [`PgPool`] that pins every connection to `config.schema`.
 ///
 /// When `create_schema` is [`CreateSchema::Yes`] the schema is created
-/// (idempotently) on every new connection.
+/// (idempotently) before creating the pool.
 ///
 /// Pool creation is retried with a constant backoff (`config.retry_delay`
 /// interval, up to `config.max_retries` attempts).  Only transient errors
@@ -274,10 +279,10 @@ pub async fn pg_pool_with_schema(
     config: &PostgresConfig,
     create_schema: CreateSchema,
 ) -> Result<PgPool, sqlx::Error> {
-    let schema_connect = match create_schema {
-        CreateSchema::Yes => schema_connect_with_create(&config.schema),
-        CreateSchema::No => schema_connect(&config.schema),
-    };
+    if create_schema == CreateSchema::Yes {
+        maybe_create_schema(config).await?;
+    }
+    let schema_connect = schema_connect(&config.schema);
 
     let backoff_strategy = ConstantBuilder::new()
         .with_delay(config.retry_delay)
