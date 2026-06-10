@@ -601,7 +601,13 @@ async fn fetch_logs(
 
     logs.into_iter()
         .filter_map(|log| match filter_block_index(&log, chain_cursor) {
-            Ok(true) => Some(Ok(log)),
+            Ok(true) => {
+                let block_number = log
+                    .block_number
+                    .expect("Must be there after filter_block_index");
+                tracing::debug!("received backfill event: {block_number}",);
+                Some(Ok(log))
+            }
             Ok(false) => None,
             Err(err) => Some(Err(err)),
         })
