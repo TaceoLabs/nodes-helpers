@@ -224,12 +224,13 @@ fn http_retry_policy() -> OrRetryPolicyFn {
     //
     // The RateLimitRetryPolicy already handles 503 Service Unavailable and other common RPC errors.
     // We additionally check for other common transient errors:
+    //   - 403 Forbidden
     //   - 408 Request Timeout
     //   - 502 Bad Gateway
     //   - 504 Gateway Timeout
     RateLimitRetryPolicy::default().or(|error: &TransportError| match error {
         RpcError::Transport(TransportErrorKind::HttpError(e)) => {
-            matches!(e.status, 408 | 502 | 504)
+            matches!(e.status, 403 | 408 | 502 | 504)
         }
         RpcError::Transport(kind) => kind
             .as_custom()
