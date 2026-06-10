@@ -16,4 +16,7 @@ lint-subcrate SUBCRATE:
 test:
     cargo test --all-features --all-targets
 
-check-pr: lint test
+cargo-deny:
+    cargo deny --log-level error --all-features check advisories
+
+check-pr: lint cargo-deny test
