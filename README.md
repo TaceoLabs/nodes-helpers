@@ -9,7 +9,6 @@ Workspace with shared helper crates for TACEO MPC nodes.
 | Crate | Description |
 |-------|-------------|
 | [`taceo-nodes-common`](./nodes-common) | Common utilities: health API, PostgreSQL, Ethereum RPC, ERC-165, graceful shutdown |
-| [`taceo-nodes-observability`](./nodes-observability) | Telemetry setup: tracing, logging, and metrics (Datadog, StatsD, Prometheus) |
 
 ## License
 
