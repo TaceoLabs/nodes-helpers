@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+## [0.7.3](https://github.com/TaceoLabs/nodes-helpers/compare/taceo-nodes-common-v0.7.2...taceo-nodes-common-v0.7.3)
+
+### ⛰️ Features
+
+
+- *(common)* Add 403 status code as retryable error - ([a7aae60](https://github.com/TaceoLabs/nodes-helpers/commit/a7aae60da1e1dc00e235333fef8e8a3a990381b6))
+
+### ⚙️ Miscellaneous Tasks
+
+
+- *(common)* Adds a debug log line when receiving a backfill event - ([a8d72ae](https://github.com/TaceoLabs/nodes-helpers/commit/a8d72ae57ee12a923fd832e9b74369b850f7d774))
+
+
 ## [0.7.2](https://github.com/TaceoLabs/nodes-helpers/compare/taceo-nodes-common-v0.7.1...taceo-nodes-common-v0.7.2)
 
 ### 🚜 Refactor
