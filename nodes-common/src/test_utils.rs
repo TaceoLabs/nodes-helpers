@@ -12,6 +12,8 @@ use tokio::sync::OnceCell;
 
 use crate::postgres::SanitizedSchema;
 
+pub use axum_test;
+
 /// Returns a unique schema name for one test (`test_0`, `test_1`, …).
 #[allow(
     clippy::missing_panics_doc,
