@@ -64,9 +64,7 @@ pub async fn shared_postgres_testcontainer() -> eyre::Result<&'static str> {
 ///
 /// Returns an error if a free port could not be found or reserved.
 pub fn random_port() -> eyre::Result<u16> {
-    Ok(reserve_port::ReservedPort::random()
-        .context("while reserving port")?
-        .port())
+    reserve_port::ReservedPort::random_permanently_reserved().context("while reserving port")
 }
 
 /// Returns a test server and its base URL for the given app.
