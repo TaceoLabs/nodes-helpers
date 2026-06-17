@@ -24,10 +24,13 @@ axum = { workspace = true, features = [
   "tokio",
   "tracing",
 ], optional = true }
+axum-test = { workspace = true, optional = true }
 backon = { workspace = true, features = ["std", "tokio-sleep"], optional = true }
+eyre = { workspace = true, optional = true }
 futures = { workspace = true, optional = true }
 git-version = { workspace = true }
 humantime-serde = { workspace = true, optional = true }
+reserve-port = { workspace = true, optional = true }
 secrecy = { workspace = true, features = ["serde"], optional = true }
 serde = { workspace = true, features = ["derive"], optional = true }
 sqlx = { workspace = true, features = [
@@ -35,6 +38,7 @@ sqlx = { workspace = true, features = [
   "runtime-tokio",
   "tls-rustls-aws-lc-rs"
 ], optional = true }
+testcontainers-modules = { workspace = true, features = ["postgres"], optional = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt", "signal", "time"] }
 tokio-util = { workspace = true }
@@ -58,7 +62,7 @@ eyre.workspace = true
 http-body = "1"
 
 [features]
-default = ["api", "postgres", "serde", "web3"]
+default = ["api", "postgres", "serde", "test-utils", "web3"]
 api = ["dep:axum", "dep:tower-http"]
 postgres = [
   "dep:backon",
@@ -68,6 +72,13 @@ postgres = [
   "dep:sqlx"
 ]
 serde = ["dep:serde"]
+test-utils = [
+  "dep:axum-test",
+  "dep:eyre",
+  "dep:reserve-port",
+  "dep:testcontainers-modules",
+  "postgres"
+]
 web3 = [
   "dep:alloy",
   "dep:backon",

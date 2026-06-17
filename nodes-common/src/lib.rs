@@ -57,6 +57,8 @@ pub use git_version;
 pub mod api;
 #[cfg(feature = "postgres")]
 pub mod postgres;
+#[cfg(feature = "test-utils")]
+pub mod test_utils;
 #[cfg(feature = "web3")]
 pub mod web3;
 
