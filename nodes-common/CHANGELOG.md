@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+## [0.7.4](https://github.com/TaceoLabs/nodes-helpers/compare/v0.7.3...v0.7.4)
+
+### ⛰️ Features
+
+
+- Add test_utils module with some commonly used utils for tests ([#55](https://github.com/TaceoLabs/nodes-helpers/pull/55)) - ([6288547](https://github.com/TaceoLabs/nodes-helpers/commit/6288547a0bf08b3db618b0fcfe87c2c7622ca8d3))
+
+### ⚙️ Miscellaneous Tasks
+
+
+- Add error to debug log on retry ([#51](https://github.com/TaceoLabs/nodes-helpers/pull/51)) - ([9f11ceb](https://github.com/TaceoLabs/nodes-helpers/commit/9f11cebeb3747faed5b86f362aea0bc6df48fcda))
+
+
 ## [0.7.3](https://github.com/TaceoLabs/nodes-helpers/compare/taceo-nodes-common-v0.7.2...taceo-nodes-common-v0.7.3)
 
 ### ⛰️ Features
