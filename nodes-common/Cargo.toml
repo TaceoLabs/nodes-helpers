@@ -30,6 +30,7 @@ eyre = { workspace = true, optional = true }
 futures = { workspace = true, optional = true }
 git-version = { workspace = true }
 humantime-serde = { workspace = true, optional = true }
+reqwest = { workspace = true, features = ["rustls-tls", "json"], optional = true }
 reserve-port = { workspace = true, optional = true }
 secrecy = { workspace = true, features = ["serde"], optional = true }
 serde = { workspace = true, features = ["derive"], optional = true }
@@ -63,7 +64,7 @@ http-body = "1"
 
 [features]
 default = ["api", "postgres", "serde", "test-utils", "web3"]
-api = ["dep:axum", "dep:tower-http"]
+api = ["dep:axum", "dep:tower-http", "dep:reqwest", "dep:secrecy", "dep:serde", "dep:tower"]
 postgres = [
   "dep:backon",
   "dep:humantime-serde",
