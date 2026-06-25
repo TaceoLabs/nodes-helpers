@@ -128,8 +128,8 @@ impl UnkeyLayer {
     ///
     /// In [`Environment::Dev`], the Unkey API is not called.
     /// Instead, a fixed set of keys is accepted:
-    /// - [`VALID_KEY`] is accepted as valid.
-    /// - [`RATE_LIMITED_KEY`] is rejected as rate-limited.
+    /// - [`TEST_VALID_KEY`] is accepted as valid.
+    /// - [`TEST_RATE_LIMITED_KEY`] is rejected as rate-limited.
     /// - All other keys are rejected as invalid.
     #[must_use]
     pub fn with_environment(mut self, environment: Environment) -> Self {

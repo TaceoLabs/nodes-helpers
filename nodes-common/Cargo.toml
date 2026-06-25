@@ -60,6 +60,7 @@ alloy = { workspace = true, features = [
   "std"
 ] }
 axum = { workspace = true, features = ["http1", "tokio", "tracing"] }
+axum-test = { workspace = true }
 eyre.workspace = true
 http-body = "1"
 
