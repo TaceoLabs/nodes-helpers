@@ -7,9 +7,10 @@
 
 use axum::{
     body::Body,
-    http::{Request, StatusCode, header::AUTHORIZATION},
+    http::{Request, StatusCode},
     response::{IntoResponse, Response},
 };
+use headers::{Authorization, Header, authorization::Bearer};
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -178,8 +179,14 @@ where
 }
 
 fn extract_bearer_token(req: &Request<Body>) -> Option<String> {
-    let value = req.headers().get(AUTHORIZATION)?.to_str().ok()?;
-    Some(value.strip_prefix("Bearer ")?.to_owned())
+    Authorization::<Bearer>::decode(
+        &mut req
+            .headers()
+            .get_all(Authorization::<Bearer>::name())
+            .iter(),
+    )
+    .ok()
+    .map(|auth| auth.token().to_owned())
 }
 
 async fn verify_api_key(

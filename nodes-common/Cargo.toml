@@ -25,6 +25,7 @@ axum = { workspace = true, features = [
   "tracing",
 ], optional = true }
 axum-test = { workspace = true, optional = true }
+headers = { workspace = true, optional = true }
 backon = { workspace = true, features = ["std", "tokio-sleep"], optional = true }
 eyre = { workspace = true, optional = true }
 futures = { workspace = true, optional = true }
@@ -64,7 +65,7 @@ http-body = "1"
 
 [features]
 default = ["api", "postgres", "serde", "test-utils", "web3"]
-api = ["dep:axum", "dep:tower-http", "dep:reqwest", "dep:secrecy", "dep:serde", "dep:tower"]
+api = ["dep:axum", "dep:headers", "dep:tower-http", "dep:reqwest", "dep:secrecy", "dep:serde", "dep:tower"]
 postgres = [
   "dep:backon",
   "dep:humantime-serde",
