@@ -85,7 +85,7 @@ impl IntoResponse for UnkeyError {
 /// ```
 #[allow(
     clippy::module_name_repetitions,
-    reason = "The `unkey` prefix is necessary for clarity when the type is imported from this module"
+    reason = "The `unkey` prefix is nice for clarity"
 )]
 #[non_exhaustive]
 #[derive(Clone)]
@@ -132,7 +132,7 @@ impl<S> Layer<S> for UnkeyLayer {
 /// Tower [`Service`] produced by [`UnkeyLayer`].
 #[allow(
     clippy::module_name_repetitions,
-    reason = "The `unkey` prefix is necessary for clarity when the type is imported from this module"
+    reason = "The `unkey` prefix is nice for clarity"
 )]
 #[non_exhaustive]
 #[derive(Clone)]

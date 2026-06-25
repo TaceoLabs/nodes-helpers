@@ -25,13 +25,13 @@ axum = { workspace = true, features = [
   "tracing",
 ], optional = true }
 axum-test = { workspace = true, optional = true }
-headers = { workspace = true, optional = true }
 backon = { workspace = true, features = ["std", "tokio-sleep"], optional = true }
 eyre = { workspace = true, optional = true }
 futures = { workspace = true, optional = true }
 git-version = { workspace = true }
+headers = { workspace = true, optional = true }
 humantime-serde = { workspace = true, optional = true }
-reqwest = { workspace = true, features = ["rustls-tls", "json"], optional = true }
+reqwest = { workspace = true, features = ["json", "rustls-tls"], optional = true }
 reserve-port = { workspace = true, optional = true }
 secrecy = { workspace = true, features = ["serde"], optional = true }
 serde = { workspace = true, features = ["derive"], optional = true }
@@ -64,8 +64,17 @@ eyre.workspace = true
 http-body = "1"
 
 [features]
-default = ["api", "postgres", "serde", "test-utils", "web3"]
-api = ["dep:axum", "dep:headers", "dep:tower-http", "dep:reqwest", "dep:secrecy", "dep:serde", "dep:tower"]
+default = [
+  "api",
+  "middleware",
+  "postgres",
+  "serde",
+  "test-utils",
+  "unkey",
+  "web3"
+]
+api = ["dep:axum", "dep:tower-http"]
+middleware = []
 postgres = [
   "dep:backon",
   "dep:humantime-serde",
@@ -80,6 +89,15 @@ test-utils = [
   "dep:reserve-port",
   "dep:testcontainers-modules",
   "postgres"
+]
+unkey = [
+  "dep:axum",
+  "dep:headers",
+  "dep:reqwest",
+  "dep:secrecy",
+  "dep:serde",
+  "dep:tower",
+  "middleware"
 ]
 web3 = [
   "dep:alloy",
