@@ -11,6 +11,7 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use headers::{Authorization, Header, authorization::Bearer};
+use reqwest::{IntoUrl, Url};
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -28,7 +29,11 @@ pub const TEST_VALID_KEY: &str = "valid_api_key";
 /// Fixed API key rejected as rate-limited when the layer runs in [`Environment::Dev`].
 pub const TEST_RATE_LIMITED_KEY: &str = "rate_limited_api_key";
 
-const DEFAULT_VERIFY_URL: &str = "https://api.unkey.com/v2/keys.verifyKey";
+/// Default Unkey verification URL.
+pub const DEFAULT_VERIFY_URL: &str = "https://api.unkey.com/v2/keys.verifyKey";
+
+/// Default timeout for Unkey verify requests.
+pub const DEFAULT_VERIFY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
 
 #[derive(Serialize, Deserialize)]
 struct VerifyKeyRequest {
@@ -99,7 +104,7 @@ impl IntoResponse for UnkeyError {
 pub struct UnkeyLayer {
     client: reqwest::Client,
     verify_key: Arc<SecretString>,
-    verify_url: String,
+    verify_url: Arc<Url>,
     environment: Environment,
 }
 
@@ -107,17 +112,28 @@ impl UnkeyLayer {
     /// Creates a new [`UnkeyLayer`].
     ///
     /// `verify_key` is the Unkey root/verify key used to authenticate the verification request.
+    ///
+    /// # Panics
+    ///
+    /// If the reqwest client cannot be built.
     #[must_use]
     pub fn new(verify_key: SecretString) -> Self {
         Self {
-            client: reqwest::Client::new(),
+            client: reqwest::Client::builder()
+                .timeout(DEFAULT_VERIFY_TIMEOUT)
+                .build()
+                .expect("can build reqwest client"),
             verify_key: Arc::new(verify_key),
-            verify_url: DEFAULT_VERIFY_URL.to_owned(),
+            verify_url: Arc::new(
+                DEFAULT_VERIFY_URL
+                    .parse()
+                    .expect("default verify URL is valid"),
+            ),
             environment: Environment::Prod,
         }
     }
 
-    /// Sets the HTTP client used to call the Unkey API. Defaults to [`reqwest::Client::new()`].
+    /// Sets the HTTP client used to call the Unkey API. Defaults to [`reqwest::Client::new()`] with [`DEFAULT_VERIFY_TIMEOUT`].
     #[must_use]
     pub fn with_client(mut self, client: reqwest::Client) -> Self {
         self.client = client;
@@ -137,10 +153,14 @@ impl UnkeyLayer {
         self
     }
 
-    /// Sets the Unkey verification URL. Defaults to `https://api.unkey.com/v2/keys.verifyKey`.
+    /// Sets the Unkey verification URL. Defaults to [`DEFAULT_VERIFY_URL`].
+    ///
+    /// # Panics
+    ///
+    /// If the provided URL is invalid.
     #[must_use]
-    pub fn with_verify_url(mut self, url: String) -> Self {
-        self.verify_url = url;
+    pub fn with_verify_url(mut self, url: impl IntoUrl) -> Self {
+        self.verify_url = Arc::new(url.into_url().expect("verify URL is valid"));
         self
     }
 }
@@ -170,7 +190,7 @@ pub struct UnkeyService<S> {
     inner: S,
     client: reqwest::Client,
     verify_key: Arc<SecretString>,
-    verify_url: String,
+    verify_url: Arc<Url>,
     environment: Environment,
 }
 
@@ -224,7 +244,7 @@ fn extract_bearer_token(req: &Request<Body>) -> Option<String> {
 async fn verify_api_key(
     client: &reqwest::Client,
     verify_key: &SecretString,
-    verify_url: &str,
+    verify_url: &Url,
     api_key: &str,
     environment: Environment,
 ) -> Result<(), UnkeyError> {
@@ -239,7 +259,7 @@ async fn verify_api_key(
     }
 
     let resp = client
-        .post(verify_url)
+        .post(verify_url.as_ref())
         .bearer_auth(verify_key.expose_secret())
         .json(&VerifyKeyRequest {
             key: api_key.to_owned(),
