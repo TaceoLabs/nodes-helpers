@@ -32,6 +32,9 @@
 //! # Optional Features
 //!
 //! * `api` (enabled by default) – exposes `/health` and `/version` Axum endpoints.
+//! * `middleware` – enables the [`middleware`] module containing Axum/Tower middleware layers.
+//! * `unkey` (implies `middleware`) – [`middleware::unkey::UnkeyLayer`], a Tower middleware
+//!   that verifies `Authorization: Bearer` tokens against the [Unkey](https://unkey.com) API.
 //! * `serde` (enabled by default) – ser/de implementation for [`Environment`].
 //! * `postgres` (enabled by default) – [`postgres::PostgresConfig`] and [`postgres::pg_pool_with_schema`] for creating a `sqlx` connection pool pinned to a schema, with configurable retry behaviour."
 //! * `web3` (enabled by default) – [`web3::HttpRpcProvider`],
@@ -53,8 +56,9 @@ use tokio_util::sync::CancellationToken;
 pub use git_version;
 
 #[cfg(feature = "api")]
-/// See [`api::routes`] and [`api::routes_with_services`].
 pub mod api;
+#[cfg(feature = "middleware")]
+pub mod middleware;
 #[cfg(feature = "postgres")]
 pub mod postgres;
 #[cfg(feature = "test-utils")]
