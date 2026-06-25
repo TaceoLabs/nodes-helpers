@@ -53,7 +53,7 @@ use tokio_util::sync::CancellationToken;
 pub use git_version;
 
 #[cfg(feature = "api")]
-/// See [`api::routes`] and [`api::routes_with_services`].
+/// See [`api::routes::routes`] and [`api::routes::routes_with_services`].
 pub mod api;
 #[cfg(feature = "postgres")]
 pub mod postgres;
