@@ -21,6 +21,13 @@ use std::{
 };
 use tower::{Layer, Service};
 
+use crate::Environment;
+
+/// Fixed API key accepted as valid when the layer runs in [`Environment::Dev`].
+pub const TEST_VALID_KEY: &str = "valid_api_key";
+/// Fixed API key rejected as rate-limited when the layer runs in [`Environment::Dev`].
+pub const TEST_RATE_LIMITED_KEY: &str = "rate_limited_api_key";
+
 const DEFAULT_VERIFY_URL: &str = "https://api.unkey.com/v2/keys.verifyKey";
 
 #[derive(Serialize, Deserialize)]
@@ -68,12 +75,12 @@ impl IntoResponse for UnkeyError {
 /// ```no_run
 /// use axum::{Router, routing::get};
 /// use secrecy::SecretString;
-/// use taceo_nodes_common::api::unkey::UnkeyLayer;
+/// use taceo_nodes_common::middleware::unkey::UnkeyLayer;
 ///
 /// #[tokio::main]
 /// async fn main() {
 ///     let verify_key = SecretString::from("unkey_root_key");
-///     let layer = UnkeyLayer::new(reqwest::Client::new(), verify_key);
+///     let layer = UnkeyLayer::new(verify_key);
 ///
 ///     let app = Router::new()
 ///         .route("/secret", get(|| async { "hello" }))
@@ -93,6 +100,7 @@ pub struct UnkeyLayer {
     client: reqwest::Client,
     verify_key: Arc<SecretString>,
     verify_url: String,
+    environment: Environment,
 }
 
 impl UnkeyLayer {
@@ -100,12 +108,33 @@ impl UnkeyLayer {
     ///
     /// `verify_key` is the Unkey root/verify key used to authenticate the verification request.
     #[must_use]
-    pub fn new(client: reqwest::Client, verify_key: SecretString) -> Self {
+    pub fn new(verify_key: SecretString) -> Self {
         Self {
-            client,
+            client: reqwest::Client::new(),
             verify_key: Arc::new(verify_key),
             verify_url: DEFAULT_VERIFY_URL.to_owned(),
+            environment: Environment::Prod,
         }
+    }
+
+    /// Sets the HTTP client used to call the Unkey API. Defaults to [`reqwest::Client::new()`].
+    #[must_use]
+    pub fn with_client(mut self, client: reqwest::Client) -> Self {
+        self.client = client;
+        self
+    }
+
+    /// Sets the deployment environment. Defaults to [`Environment::Prod`].
+    ///
+    /// In [`Environment::Dev`], the Unkey API is not called.
+    /// Instead, a fixed set of keys is accepted:
+    /// - [`VALID_KEY`] is accepted as valid.
+    /// - [`RATE_LIMITED_KEY`] is rejected as rate-limited.
+    /// - All other keys are rejected as invalid.
+    #[must_use]
+    pub fn with_environment(mut self, environment: Environment) -> Self {
+        self.environment = environment;
+        self
     }
 
     /// Sets the Unkey verification URL. Defaults to `https://api.unkey.com/v2/keys.verifyKey`.
@@ -125,6 +154,7 @@ impl<S> Layer<S> for UnkeyLayer {
             client: self.client.clone(),
             verify_key: self.verify_key.clone(),
             verify_url: self.verify_url.clone(),
+            environment: self.environment,
         }
     }
 }
@@ -141,6 +171,7 @@ pub struct UnkeyService<S> {
     client: reqwest::Client,
     verify_key: Arc<SecretString>,
     verify_url: String,
+    environment: Environment,
 }
 
 impl<S> Service<Request<Body>> for UnkeyService<S>
@@ -165,12 +196,13 @@ where
         let client = self.client.clone();
         let verify_key = self.verify_key.clone();
         let verify_url = self.verify_url.clone();
+        let environment = self.environment;
 
         Box::pin(async move {
             let Some(api_key) = api_key else {
                 return Ok(UnkeyError::Missing.into_response());
             };
-            match verify_api_key(&client, &verify_key, &verify_url, &api_key).await {
+            match verify_api_key(&client, &verify_key, &verify_url, &api_key, environment).await {
                 Ok(()) => inner.call(req).await,
                 Err(err) => Ok(err.into_response()),
             }
@@ -194,7 +226,18 @@ async fn verify_api_key(
     verify_key: &SecretString,
     verify_url: &str,
     api_key: &str,
+    environment: Environment,
 ) -> Result<(), UnkeyError> {
+    if environment.is_dev() {
+        if api_key == TEST_VALID_KEY {
+            return Ok(());
+        }
+        if api_key == TEST_RATE_LIMITED_KEY {
+            return Err(UnkeyError::RateLimited);
+        }
+        return Err(UnkeyError::Invalid);
+    }
+
     let resp = client
         .post(verify_url)
         .bearer_auth(verify_key.expose_secret())
@@ -227,64 +270,16 @@ async fn verify_api_key(
     Ok(())
 }
 
-#[cfg(all(test, feature = "test-utils"))]
+#[cfg(test)]
 mod tests {
     use super::*;
-    use axum::{Router, http::StatusCode, routing::post};
+    use axum::{Router, http::StatusCode};
     use axum_test::TestServer;
     use secrecy::SecretString;
 
-    const VALID_KEY: &str = "valid_api_key";
-    const RATE_LIMITED_KEY: &str = "rate_limited_api_key";
-
-    async fn mock_verify_handler(
-        axum::extract::Json(body): axum::extract::Json<VerifyKeyRequest>,
-    ) -> axum::extract::Json<VerifyKeyResponse> {
-        axum::extract::Json(match body.key.as_str() {
-            VALID_KEY => VerifyKeyResponse {
-                data: VerifyKeyData {
-                    valid: true,
-                    code: String::new(),
-                },
-            },
-            RATE_LIMITED_KEY => VerifyKeyResponse {
-                data: VerifyKeyData {
-                    valid: false,
-                    code: "RATE_LIMITED".to_owned(),
-                },
-            },
-            _ => VerifyKeyResponse {
-                data: VerifyKeyData {
-                    valid: false,
-                    code: "INVALID_KEY".to_owned(),
-                },
-            },
-        })
-    }
-
-    struct MockUnkeyApi {
-        _server: TestServer,
-        verify_url: String,
-    }
-
-    impl MockUnkeyApi {
-        fn start() -> Self {
-            let router = Router::new().route("/v2/keys.verifyKey", post(mock_verify_handler));
-            let (server, addr) = crate::test_utils::test_server(router);
-            let verify_url = format!("{addr}/v2/keys.verifyKey");
-            Self {
-                _server: server,
-                verify_url,
-            }
-        }
-    }
-
-    fn make_app(mock: &MockUnkeyApi) -> TestServer {
-        let layer = UnkeyLayer::new(
-            reqwest::Client::new(),
-            SecretString::from("test_verify_key"),
-        )
-        .with_verify_url(mock.verify_url.clone());
+    fn make_app() -> TestServer {
+        let layer = UnkeyLayer::new(SecretString::from("test_verify_key"))
+            .with_environment(Environment::Test);
 
         let app = Router::new()
             .route(
@@ -298,14 +293,14 @@ mod tests {
 
     #[tokio::test]
     async fn valid_key_is_forwarded() {
-        let mock = MockUnkeyApi::start();
-        let server = make_app(&mock);
+        let server = make_app();
 
         server
             .get("/protected")
             .add_header(
                 axum::http::header::AUTHORIZATION,
-                axum::http::HeaderValue::from_static("Bearer valid_api_key"),
+                axum::http::HeaderValue::from_str(&format!("Bearer {TEST_VALID_KEY}"))
+                    .expect("valid header"),
             )
             .await
             .assert_status_ok();
@@ -313,8 +308,7 @@ mod tests {
 
     #[tokio::test]
     async fn missing_key_returns_unauthorized() {
-        let mock = MockUnkeyApi::start();
-        let server = make_app(&mock);
+        let server = make_app();
 
         server
             .get("/protected")
@@ -324,8 +318,7 @@ mod tests {
 
     #[tokio::test]
     async fn invalid_key_returns_unauthorized() {
-        let mock = MockUnkeyApi::start();
-        let server = make_app(&mock);
+        let server = make_app();
 
         server
             .get("/protected")
@@ -339,14 +332,14 @@ mod tests {
 
     #[tokio::test]
     async fn rate_limited_key_returns_too_many_requests() {
-        let mock = MockUnkeyApi::start();
-        let server = make_app(&mock);
+        let server = make_app();
 
         server
             .get("/protected")
             .add_header(
                 axum::http::header::AUTHORIZATION,
-                axum::http::HeaderValue::from_static("Bearer rate_limited_api_key"),
+                axum::http::HeaderValue::from_str(&format!("Bearer {TEST_RATE_LIMITED_KEY}"))
+                    .expect("valid header"),
             )
             .await
             .assert_status(StatusCode::TOO_MANY_REQUESTS);
