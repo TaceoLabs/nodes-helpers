@@ -279,7 +279,7 @@ mod tests {
 
     fn make_app() -> TestServer {
         let layer = UnkeyLayer::new(SecretString::from("test_verify_key"))
-            .with_environment(Environment::Test);
+            .with_environment(Environment::Dev);
 
         let app = Router::new()
             .route(
