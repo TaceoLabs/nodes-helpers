@@ -31,7 +31,7 @@ futures = { workspace = true, optional = true }
 git-version = { workspace = true }
 headers = { workspace = true, optional = true }
 humantime-serde = { workspace = true, optional = true }
-reqwest = { workspace = true, features = ["json", "rustls-tls"], optional = true }
+reqwest = { workspace = true, features = ["default-tls", "json"], optional = true }
 reserve-port = { workspace = true, optional = true }
 secrecy = { workspace = true, features = ["serde"], optional = true }
 serde = { workspace = true, features = ["derive"], optional = true }
