@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+## [0.7.5](https://github.com/TaceoLabs/nodes-helpers/compare/v0.7.4...v0.7.5)
+
+### ⛰️ Features
+
+
+- Add Unkey middleware ([#57](https://github.com/TaceoLabs/nodes-helpers/pull/57)) - ([23b0abb](https://github.com/TaceoLabs/nodes-helpers/commit/23b0abb56449b11a24fdc68c6dad31aab38efa43))
+
+### 🏗️ Build
+
+
+- *(deps)* Bump reqwest to 0.13 ([#60](https://github.com/TaceoLabs/nodes-helpers/pull/60)) - ([e652e97](https://github.com/TaceoLabs/nodes-helpers/commit/e652e97000e27f9177d10da3f6538e7c313c836b))
+
+
 ## [0.7.4](https://github.com/TaceoLabs/nodes-helpers/compare/v0.7.3...v0.7.4)
 
 ### ⛰️ Features
