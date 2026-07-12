@@ -61,12 +61,12 @@ jobs:
       - name: Clippy
         id: nightly-clippy
         run: |
-          cargo clippy --workspace --tests --examples --benches -q --color=never 2> clippy.txt
+          cargo clippy --workspace --all-features --tests --examples --benches -q --color=never 2> clippy.txt
           sed -i '/^remote: Hello from chartered/d' clippy.txt
       - name: Build documentation
         id: nightly-doc
         run: |
-          cargo doc --workspace --no-deps -q --color=never 2> doc.txt
+          cargo doc --workspace --all-features --no-deps -q --color=never 2> doc.txt
       - name: Write to Job Summary
         id: report
         shell: bash
