@@ -4,6 +4,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use axum_test::{TestServer, transport_layer::IntoTransportLayer};
 use eyre::Context;
+use sqlx::{Connection as _, Executor as _, PgConnection};
 use testcontainers_modules::{
     postgres::Postgres,
     testcontainers::{ContainerAsync, runners::AsyncRunner as _},
@@ -83,4 +84,29 @@ pub fn test_server<A: IntoTransportLayer>(app: A) -> (TestServer, String) {
         .trim_end_matches('/')
         .to_string();
     (server, url)
+}
+
+/// Creates a connection to the provided database and creates the
+/// provided schema if it does not exist yet.
+///
+/// Useful when creating test-fixtures.
+///
+/// # Errors
+/// If the creation of the schema fails for any reason (e.g,. DB connection issues)
+pub async fn open_pg_connection(
+    connection_string: &str,
+    schema: &SanitizedSchema,
+) -> eyre::Result<PgConnection> {
+    let mut conn = PgConnection::connect(connection_string)
+        .await
+        .context("while opening PgConnection")?;
+
+    conn.execute(format!("CREATE SCHEMA IF NOT EXISTS \"{schema}\"").as_ref())
+        .await
+        .context("TestUtils: cannot create schema")?;
+
+    conn.execute(format!("SET search_path TO \"{schema}\"").as_ref())
+        .await
+        .context("TestUtils: cannot set search path of connection")?;
+    Ok(conn)
 }
