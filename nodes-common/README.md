@@ -8,12 +8,18 @@ Collection of common functions used by nodes in our MPC networks.
 
 ## Features
 
+No features are enabled by default; enable the ones you need.
+
 | Feature | Default | Description |
 |---------|---------|-------------|
-| `web3` | ✅ | HTTP Ethereum RPC provider via Alloy, ERC-165 interface detection |
-| `api` | ✅ | Health and version endpoints via Axum |
-| `postgres` | ✅ | PostgreSQL connection pool via SQLx |
-| `serde` | ✅ | Serde support |
+| `web3` | | HTTP Ethereum RPC provider via Alloy, ERC-165 interface detection |
+| `web3-asserter` | | Alloy mocked-provider constructor for `HttpRpcProvider` (tests) |
+| `api` | | Health and version endpoints via Axum |
+| `postgres` | | PostgreSQL connection pool via SQLx |
+| `serde` | | Serde support |
+| `middleware` | | Axum/Tower middleware layers |
+| `unkey` | | Bearer-token verification via the Unkey API |
+| `test-utils` | | Integration-test helpers: Postgres testcontainers, test schemas, Axum test server |
 
 ## License
 

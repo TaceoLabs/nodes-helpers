@@ -9,6 +9,9 @@ repository.workspace = true
 license.workspace = true
 publish = true
 
+[package.metadata.docs.rs]
+all-features = true
+
 [dependencies]
 alloy = { workspace = true, features = [
   "contract",
@@ -65,15 +68,7 @@ eyre.workspace = true
 http-body = "1"
 
 [features]
-default = [
-  "api",
-  "middleware",
-  "postgres",
-  "serde",
-  "test-utils",
-  "unkey",
-  "web3"
-]
+default = []
 api = ["dep:axum", "dep:tower-http"]
 middleware = []
 postgres = [

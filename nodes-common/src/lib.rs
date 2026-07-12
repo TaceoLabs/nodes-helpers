@@ -31,16 +31,27 @@
 //!
 //! # Optional Features
 //!
-//! * `api` (enabled by default) – exposes `/health` and `/version` Axum endpoints.
+//! * `api` – exposes `/health` and `/version` Axum endpoints.
 //! * `middleware` – enables the [`middleware`] module containing Axum/Tower middleware layers.
 //! * `unkey` (implies `middleware`) – [`middleware::unkey::UnkeyLayer`], a Tower middleware
 //!   that verifies `Authorization: Bearer` tokens against the [Unkey](https://unkey.com) API.
-//! * `serde` (enabled by default) – ser/de implementation for [`Environment`].
-//! * `postgres` (enabled by default) – [`postgres::PostgresConfig`] and [`postgres::pg_pool_with_schema`] for creating a `sqlx` connection pool pinned to a schema, with configurable retry behaviour."
-//! * `web3` (enabled by default) – [`web3::HttpRpcProvider`],
+//! * `serde` – ser/de implementation for [`Environment`].
+//! * `postgres` – [`postgres::PostgresConfig`] and [`postgres::pg_pool_with_schema`] for creating a `sqlx` connection pool pinned to a schema, with configurable retry behaviour.
+//! * `web3` – [`web3::HttpRpcProvider`],
 //!   [`web3::HttpRpcProviderBuilder`], and [`web3::HttpRpcProviderConfig`]
 //!   for building HTTP Ethereum RPC providers with automatic retry and
 //!   failover, plus ERC-165 interface detection utilities.
+//! * `test-utils` (implies `postgres`) – enables the
+//!   [`test_utils`] module of integration-test helpers:
+//!   [`test_utils::postgres_testcontainer`] /
+//!   [`test_utils::shared_postgres_testcontainer`] for ephemeral Postgres
+//!   containers, [`test_utils::next_test_schema`] for isolated schema names,
+//!   [`test_utils::random_port`], and [`test_utils::test_server`] for spinning
+//!   up an Axum test server.
+//! * `web3-asserter` (implies `web3`) – adds
+//!   [`web3::HttpRpcProvider::with_mock_asserter`] (and a matching
+//!   `From<Asserter>` impl) for building a provider backed by Alloy's mocked
+//!   provider infrastructure, intended for tests.
 
 use core::fmt;
 use std::sync::{
