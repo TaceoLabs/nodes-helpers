@@ -108,3 +108,4 @@ web3 = [
   "dep:serde",
   "dep:tower"
 ]
+web3-asserter = ["alloy/providers", "web3"]

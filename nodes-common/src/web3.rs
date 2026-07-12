@@ -18,6 +18,8 @@ use std::{
     time::Duration,
 };
 
+#[cfg(feature = "web3-asserter")]
+use alloy::providers::mock::Asserter;
 use alloy::{
     network::EthereumWallet,
     primitives::ChainId,
@@ -433,6 +435,30 @@ impl HttpRpcProvider {
     pub fn inner(&self) -> DynProvider {
         self.0.clone()
     }
+
+    /// Creates a provider backed by the given mocked [`Asserter`].
+    ///
+    /// This is intended for tests and uses Alloy's mocked provider
+    /// infrastructure. See the Alloy mocking provider example for details:
+    /// <https://alloy.rs/examples/providers/mocking/>.
+    ///
+    /// This method does not build a retry-layer. It must only be used for tests.
+    #[cfg(feature = "web3-asserter")]
+    #[must_use]
+    pub fn with_mock_asserter(asserter: Asserter) -> Self {
+        Self(
+            ProviderBuilder::new()
+                .connect_mocked_client(asserter)
+                .erased(),
+        )
+    }
+}
+
+#[cfg(feature = "web3-asserter")]
+impl From<Asserter> for HttpRpcProvider {
+    fn from(value: Asserter) -> Self {
+        Self::with_mock_asserter(value)
+    }
 }
 
 impl AsRef<DynProvider> for HttpRpcProvider {
@@ -523,7 +549,7 @@ where
                 .sleep(tokio::time::sleep)
                 .when(|e| policy.should_retry(e))
                 .notify(|err, duration| {
-                    tracing::debug!(
+                    tracing::warn!(
                         ?err,
                         "Retrying RPC request after: {duration:?}. Reason: {err}"
                     );

@@ -472,3 +472,19 @@ async fn http_provider_does_not_retry_non_timeout_custom_error() {
     ));
     assert_eq!(server.request_count().load(Ordering::SeqCst), 1);
 }
+
+#[cfg(feature = "web3-asserter")]
+#[tokio::test]
+async fn with_asserter_uses_mocked_provider() {
+    use alloy::primitives::U64;
+
+    let asserter = alloy::providers::mock::Asserter::new();
+
+    // Expect one RPC call.
+    asserter.push_success(&U64::from(42));
+
+    let provider = HttpRpcProvider::with_mock_asserter(asserter);
+
+    let block = provider.get_block_number().await.expect("Should return 42");
+    assert_eq!(block, 42);
+}
