@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+## [0.8.0](https://github.com/TaceoLabs/nodes-helpers/compare/v0.7.4...v0.8.0)
+
+### ⛰️ Features
+
+
+- *(common)* Add open_pg_connection for test-fixtures - ([e265053](https://github.com/TaceoLabs/nodes-helpers/commit/e2650535dc658698bef5cf5b6ce400c61e295164))
+- *(common)* Adds constructor for provider that uses alloy asserter - ([5f3d254](https://github.com/TaceoLabs/nodes-helpers/commit/5f3d2543286e1fa84e7fae5bdd7fe9cb8c30642b))
+- Add Unkey middleware ([#57](https://github.com/TaceoLabs/nodes-helpers/pull/57)) - ([23b0abb](https://github.com/TaceoLabs/nodes-helpers/commit/23b0abb56449b11a24fdc68c6dad31aab38efa43))
+
+### 🏗️ Build
+
+
+- *(common)* Remove all default features - ([06f0b0d](https://github.com/TaceoLabs/nodes-helpers/commit/06f0b0d27dbc02975c05655e2f64271ee60f7e7d))
+- *(deps)* Bump reqwest to 0.13 ([#60](https://github.com/TaceoLabs/nodes-helpers/pull/60)) - ([e652e97](https://github.com/TaceoLabs/nodes-helpers/commit/e652e97000e27f9177d10da3f6538e7c313c836b))
+
+
 ## [0.7.4](https://github.com/TaceoLabs/nodes-helpers/compare/v0.7.3...v0.7.4)
 
 ### ⛰️ Features
