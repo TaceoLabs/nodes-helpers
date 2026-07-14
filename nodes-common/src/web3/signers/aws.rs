@@ -1,5 +1,7 @@
-use alloy::signers::aws::{AwsSigner, AwsSignerError, aws_config, aws_sdk_kms};
+use alloy::signers::aws::{AwsSigner, AwsSignerError, aws_sdk_kms};
 use serde::Deserialize;
+
+pub use alloy::signers::aws::aws_config;
 
 /// Configuration for a signer backed by an AWS KMS key.
 #[derive(Debug, Clone, Deserialize)]
