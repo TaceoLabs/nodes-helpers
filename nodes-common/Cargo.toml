@@ -79,6 +79,9 @@ postgres = [
   "dep:sqlx"
 ]
 serde = ["dep:serde"]
+signer-aws = ["alloy/signer-aws", "web3"]
+signer-gcp = ["alloy/signer-gcp", "web3"]
+signer-local = ["alloy/signer-local", "dep:secrecy", "web3"]
 test-utils = [
   "dep:axum-test",
   "dep:eyre",
