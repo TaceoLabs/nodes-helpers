@@ -12,6 +12,11 @@ publish = true
 [package.metadata.docs.rs]
 all-features = true
 
+[package.metadata.cargo-all-features]
+# We want to detect cases where we use deps or module from other features that are missing or not enabled
+# so we set the max combination size to 1, to build each feature individually and not in combination with other features.
+max_combination_size = 1
+
 [dependencies]
 alloy = { workspace = true, features = [
   "contract",
