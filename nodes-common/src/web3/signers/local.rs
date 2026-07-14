@@ -22,7 +22,7 @@ pub struct PrivateKeySignerConfig {
 }
 
 impl PrivateKeySignerConfig {
-    /// Builds a [`TxSigner`] from the configured private key.
+    /// Builds a [`PrivateKeySigner`] from the configured private key.
     ///
     /// # Errors
     ///

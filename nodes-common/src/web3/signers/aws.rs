@@ -17,7 +17,7 @@ pub struct AwsSignerConfig {
 }
 
 impl AwsSignerConfig {
-    /// Builds a [`TxSigner`] backed by AWS KMS from this configuration.
+    /// Builds a [`AwsSigner`] from this configuration, using the provided AWS SDK configuration.
     ///
     /// # Errors
     ///
