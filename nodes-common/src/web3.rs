@@ -48,6 +48,7 @@ use crate::Environment;
 
 pub mod erc165;
 pub mod event_stream;
+pub mod signers;
 
 /// A dedicated HTTP RPC provider.
 ///
