@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+## [0.8.1](https://github.com/TaceoLabs/nodes-helpers/compare/v0.8.0...v0.8.1)
+
+### ⛰️ Features
+
+
+- *(nodes-common/src/postgres.rs)* Add default schema ([#68](https://github.com/TaceoLabs/nodes-helpers/pull/68)) - ([c476110](https://github.com/TaceoLabs/nodes-helpers/commit/c4761108c711eec16459f740fc88f47550986c2b))
+- Add configs with into_signer functions for aws, gcp and local ([#63](https://github.com/TaceoLabs/nodes-helpers/pull/63)) - ([4f64307](https://github.com/TaceoLabs/nodes-helpers/commit/4f64307da51744fb7216cc078ebfc520d2ab1417))
+
+### ⚙️ Miscellaneous Tasks
+
+
+- Limit all-features max_combination_size to only check if features work individually ([#64](https://github.com/TaceoLabs/nodes-helpers/pull/64)) - ([ee484de](https://github.com/TaceoLabs/nodes-helpers/commit/ee484dec6f3f9d34a380f4877923403931a27821))
+
+
 ## [0.8.0](https://github.com/TaceoLabs/nodes-helpers/compare/v0.7.4...v0.8.0)
 
 ### ⛰️ Features
