@@ -147,6 +147,7 @@ pub struct PostgresConfig {
     /// Database schema to use.  When [`CreateSchema::Yes`] is passed to
     /// [`pg_pool_with_schema`] and the schema does not exist yet, it is
     /// created automatically.
+    #[serde(default = "PostgresConfig::default_schema")]
     pub schema: SanitizedSchema,
     /// Maximum number of connections in the connection pool.
     #[serde(default = "PostgresConfig::default_max_connections")]
@@ -177,6 +178,11 @@ pub struct PostgresConfig {
 }
 
 impl PostgresConfig {
+    /// Default schema
+    fn default_schema() -> SanitizedSchema {
+        SanitizedSchema("public".to_owned())
+    }
+
     /// Default max connections
     fn default_max_connections() -> NonZeroU32 {
         NonZeroU32::try_from(4).expect("Is non-zero")
