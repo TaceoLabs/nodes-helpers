@@ -21,10 +21,7 @@ max_combination_size = 1
 alloy = { workspace = true, features = [
   "contract",
   "json-rpc",
-  "node-bindings",
-  "provider-anvil-api",
   "provider-ws",
-  "providers",
   "pubsub",
   "reqwest-rustls-tls",
   "rpc-types",
@@ -91,6 +88,9 @@ signer-aws = ["alloy/signer-aws", "web3"]
 signer-gcp = ["alloy/signer-gcp", "web3"]
 signer-local = ["alloy/signer-local", "dep:secrecy", "web3"]
 test-utils = [
+  "alloy/node-bindings",
+  "alloy/provider-anvil-api",
+  "alloy/providers",
   "dep:alloy",
   "dep:axum-test",
   "dep:eyre",
