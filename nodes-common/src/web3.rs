@@ -30,7 +30,7 @@ use alloy::{
     network::{Ethereum, EthereumWallet},
     primitives::ChainId,
     providers::{
-        DynProvider, PendingTransactionBuilder, Provider, ProviderBuilder,
+        DynProvider, PendingTransactionBuilder, PendingTransactionError, Provider, ProviderBuilder,
         fillers::{BlobGasFiller, ChainIdFiller, NonceManager, SimpleNonceManager},
     },
     rpc::{
@@ -596,31 +596,9 @@ where
     }
 }
 
-/// Errors returned by [`GetReceiptExt::get_receipt_with_retry`].
-#[derive(Debug, thiserror::Error)]
-#[non_exhaustive]
-pub enum GetReceiptError {
-    /// Every poll returned `Ok(None)`: the transaction simply hasn't
-    /// produced a receipt yet. It may still land on chain.
-    #[error("could not fetch receipt for transaction")]
-    NotFound,
-    /// A receipt was found, but the transaction has not yet reached the
-    /// configured number of confirmations.
-    #[error("transaction has not reached the required number of confirmations")]
-    NotEnoughConfirmations,
-    /// A receipt received from the RPC was missing its block number.
-    #[error("missing block number on receipt")]
-    BlockNumberMissing,
-    /// Retries were exhausted because polls were failing outright
-    /// (transport error), not merely coming back empty. Carries the last
-    /// error seen.
-    #[error(transparent)]
-    Transport(#[from] TransportError),
-}
-
 /// Extension trait adding [`get_receipt_with_retry`](GetReceiptExt::get_receipt_with_retry)
 /// to [`PendingTransactionBuilder`].
-pub trait GetReceiptExt {
+pub trait GetReceiptExt: Sized {
     /// Waits for the receipt of an already-broadcast transaction, re-polling
     /// by transaction hash if the RPC does not serve the receipt right away.
     ///
@@ -636,34 +614,63 @@ pub trait GetReceiptExt {
     ///
     /// Tries [`PendingTransactionBuilder::get_receipt`] first, which already
     /// waits for the transaction to confirm. If that fails, falls back to
-    /// polling the pending transaction's provider directly, retrying
-    /// according to the given `builder` (e.g. [`ConstantBuilder`](backon::ConstantBuilder)
-    /// or [`ExponentialBuilder`]) until it stops yielding backoff durations.
+    /// retrying [`PendingTransactionBuilder::get_receipt`] again on a fresh
+    /// builder for the same transaction hash and required confirmations,
+    /// according to the given `builder` (e.g.
+    /// [`ConstantBuilder`](backon::ConstantBuilder) or [`ExponentialBuilder`])
+    /// until it stops yielding backoff durations.
     ///
     /// # Errors
     ///
-    /// * [`GetReceiptError::NotFound`] - every poll came back empty. The
-    ///   transaction may still be included on chain.
-    /// * [`GetReceiptError::NotEnoughConfirmations`] - a receipt was found,
-    ///   but the transaction never reached the configured number of confirmations.
-    /// * [`GetReceiptError::BlockNumberMissing`] - a receipt was found,
-    ///   but the receipt was missing its block number.
-    /// * [`GetReceiptError::Transport`] - every poll failed outright; carries
-    ///   the last transport error seen.
+    /// Returns the last [`PendingTransactionError`] seen once retries are
+    /// exhausted.
     fn get_receipt_with_retry(
         self,
         builder: impl BackoffBuilder,
-    ) -> impl Future<Output = Result<TransactionReceipt, GetReceiptError>> + Send;
+    ) -> impl Future<Output = Result<TransactionReceipt, PendingTransactionError>> + Send;
+
+    /// Waits for the receipt of an already-broadcast transaction, re-polling
+    /// by transaction hash if the RPC does not serve the receipt right away.
+    ///
+    /// This works around a gap in `alloy`'s own
+    /// [`PendingTransactionBuilder::get_receipt`]: it retries while a
+    /// transaction is unconfirmed, but once its confirmation watcher sees the
+    /// transaction confirmed and the immediately-following
+    /// `eth_getTransactionReceipt` call returns `null` anyway, it gives up
+    /// with no further retry. This is common behind a load-balanced RPC
+    /// endpoint where the backend serving that second call hasn't caught up
+    /// yet -- the transaction is already on chain, so treating a missing
+    /// receipt as a failed submission is wrong.
+    ///
+    /// Tries [`PendingTransactionBuilder::get_receipt`] first, which already
+    /// waits for the transaction to confirm. If that fails, falls back to
+    /// retrying [`PendingTransactionBuilder::get_receipt`] again on a fresh
+    /// builder for the same transaction hash and required confirmations,
+    /// 10 times with a 2-second delay between attempts.
+    ///
+    /// # Errors
+    ///
+    /// Returns the last [`PendingTransactionError`] seen once retries are
+    /// exhausted.
+    fn get_receipt_with_default_retry(
+        self,
+    ) -> impl Future<Output = Result<TransactionReceipt, PendingTransactionError>> + Send {
+        self.get_receipt_with_retry(
+            backon::ConstantBuilder::new()
+                .with_delay(Duration::from_secs(2))
+                .with_max_times(10),
+        )
+    }
 }
 
 impl GetReceiptExt for PendingTransactionBuilder<Ethereum> {
     async fn get_receipt_with_retry(
         self,
         builder: impl BackoffBuilder,
-    ) -> Result<TransactionReceipt, GetReceiptError> {
+    ) -> Result<TransactionReceipt, PendingTransactionError> {
         let tx_hash = *self.tx_hash();
         let provider = self.provider().clone();
-        let required_confirmations = self.required_confirmations();
+        let config = self.inner().clone();
 
         match self.get_receipt().await {
             Ok(receipt) => return Ok(receipt),
@@ -673,51 +680,16 @@ impl GetReceiptExt for PendingTransactionBuilder<Ethereum> {
         }
 
         let poll = || async {
-            let receipt = provider
-                .get_transaction_receipt(tx_hash)
-                .await?
-                .ok_or(GetReceiptError::NotFound)?;
-
-            // A raw `eth_getTransactionReceipt` only tells us the transaction was
-            // mined, not that it reached `required_confirmations` -- unlike
-            // `get_receipt()` above, which is confirmation-depth aware. Check the
-            // depth ourselves so the fallback doesn't hand back a receipt that's
-            // shallower than what was configured.
-            let receipt_block = receipt
-                .block_number
-                .ok_or(GetReceiptError::BlockNumberMissing)?;
-            // The block at which the transaction is considered confirmed, same as in alloy.
-            let confirmed_at = receipt_block + required_confirmations.saturating_sub(1);
-            let current_block = provider.get_block_number().await?;
-            if current_block < confirmed_at {
-                return Err(GetReceiptError::NotEnoughConfirmations);
-            }
-
-            Ok(receipt)
+            let pending = PendingTransactionBuilder::from_config(provider.clone(), config.clone());
+            pending.get_receipt().await
         };
 
-        poll
-            .retry(builder)
+        poll.retry(builder)
             .sleep(tokio::time::sleep)
-            .notify(|miss, dur| match miss {
-                GetReceiptError::NotFound => {
-                    tracing::warn!("still no receipt for transaction {tx_hash}, retrying in {dur:?}");
-                }
-                GetReceiptError::NotEnoughConfirmations => {
-                    tracing::warn!(
-                        "receipt for transaction {tx_hash} found but not enough confirmations yet, retrying in {dur:?}"
-                    );
-                }
-                GetReceiptError::BlockNumberMissing => {
-                    tracing::warn!(
-                        "receipt for transaction {tx_hash} missing block number, retrying in {dur:?}"
-                    );
-                }
-                GetReceiptError::Transport(err) => {
-                    tracing::warn!(
-                        "failed to fetch receipt for transaction {tx_hash} ({err}), retrying in {dur:?}"
-                    );
-                }
+            .notify(|err, dur| {
+                tracing::warn!(
+                    "failed to fetch receipt for transaction {tx_hash} ({err}), retrying in {dur:?}"
+                );
             })
             .await
     }
