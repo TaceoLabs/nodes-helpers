@@ -27,6 +27,7 @@ alloy = { workspace = true, features = [
   "rpc-types",
   "std"
 ], optional = true }
+async-trait = { workspace = true, optional = true }
 axum = { workspace = true, features = [
   "http1",
   "tokio",
@@ -43,6 +44,7 @@ reqwest = { workspace = true, features = ["default-tls", "json"], optional = tru
 reserve-port = { workspace = true, optional = true }
 secrecy = { workspace = true, features = ["serde"], optional = true }
 serde = { workspace = true, features = ["derive"], optional = true }
+serde_json.workspace = true
 sqlx = { workspace = true, features = [
   "postgres",
   "runtime-tokio",
@@ -105,6 +107,7 @@ unkey = [
 ]
 web3 = [
   "dep:alloy",
+  "dep:async-trait",
   "dep:backon",
   "dep:futures",
   "dep:humantime-serde",
