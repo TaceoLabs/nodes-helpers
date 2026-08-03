@@ -488,3 +488,74 @@ async fn with_asserter_uses_mocked_provider() {
     let block = provider.get_block_number().await.expect("Should return 42");
     assert_eq!(block, 42);
 }
+
+#[cfg(feature = "web3-asserter")]
+fn mock_receipt_json(tx_hash: alloy::primitives::TxHash, block_number: u64) -> serde_json::Value {
+    use alloy::primitives::{Address, B256};
+
+    serde_json::json!({
+        "type": "0x0",
+        "status": "0x1",
+        "cumulativeGasUsed": "0x5208",
+        "logs": [],
+        "logsBloom": format!("0x{}", "00".repeat(256)),
+        "transactionHash": tx_hash,
+        "transactionIndex": "0x0",
+        "blockHash": B256::ZERO,
+        "blockNumber": format!("0x{block_number:x}"),
+        "gasUsed": "0x5208",
+        "effectiveGasPrice": "0x1",
+        "from": Address::ZERO,
+        "to": Address::ZERO,
+        "contractAddress": null,
+    })
+}
+
+#[cfg(feature = "web3-asserter")]
+#[tokio::test]
+async fn get_receipt_with_retry_falls_back_to_polling_when_get_receipt_fails() {
+    use alloy::{
+        primitives::{TxHash, U64},
+        providers::PendingTransactionBuilder,
+    };
+    use backon::ConstantBuilder;
+
+    use crate::web3::GetReceiptExt;
+
+    let tx_hash = TxHash::repeat_byte(0x11);
+    let asserter = alloy::providers::mock::Asserter::new();
+    let provider = HttpRpcProvider::with_mock_asserter(asserter.clone());
+
+    // The eager `eth_getTransactionReceipt` call inside alloy's own
+    // `watch_pending_transaction` fails outright, so `get_receipt()` returns
+    // an error before ever touching the confirmation heartbeat. This is what
+    // sends `get_receipt_with_retry` into its own polling fallback.
+    asserter.push_failure_msg("simulated load-balancer hiccup");
+
+    // Fallback poll, attempt 1: a receipt exists at block 10, but the chain
+    // is still at block 10 too -- only 1 confirmation, not enough for the 2
+    // we require.
+    asserter.push_success(&mock_receipt_json(tx_hash, 10));
+    asserter.push_success(&U64::from(10));
+
+    // Fallback poll, attempt 2: the chain advanced, now 2 confirmations.
+    asserter.push_success(&mock_receipt_json(tx_hash, 10));
+    asserter.push_success(&U64::from(11));
+
+    let builder = PendingTransactionBuilder::new(provider.root().clone(), tx_hash)
+        .with_required_confirmations(2);
+    let retry_policy = ConstantBuilder::default()
+        .with_delay(Duration::from_millis(1))
+        .with_max_times(5);
+
+    let receipt = builder
+        .get_receipt_with_retry(retry_policy)
+        .await
+        .expect("fallback polling should eventually return the receipt");
+
+    assert_eq!(receipt.block_number, Some(10));
+    assert!(
+        asserter.read_q().is_empty(),
+        "every mocked response should be consumed"
+    );
+}
