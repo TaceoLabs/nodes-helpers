@@ -88,11 +88,15 @@ signer-aws = ["alloy/signer-aws", "web3"]
 signer-gcp = ["alloy/signer-gcp", "web3"]
 signer-local = ["alloy/signer-local", "dep:secrecy", "web3"]
 test-utils = [
+  "alloy/node-bindings",
+  "alloy/provider-anvil-api",
+  "alloy/providers",
+  "dep:alloy",
   "dep:axum-test",
   "dep:eyre",
   "dep:reserve-port",
   "dep:testcontainers-modules",
-  "postgres"
+  "postgres",
 ]
 unkey = [
   "dep:axum",
