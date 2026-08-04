@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+## [0.8.2](https://github.com/TaceoLabs/nodes-helpers/compare/v0.8.1...v0.8.2)
+
+### ⛰️ Features
+
+
+- *(common)* Added helper to deploy Multicall3 to anvil ([#71](https://github.com/TaceoLabs/nodes-helpers/pull/71)) - ([63e03e4](https://github.com/TaceoLabs/nodes-helpers/commit/63e03e4ab73a2110185bd6dceecf44cf23f8f8ae))
+- *(web3)* Add GetReceiptExt::get_receipt_with_retry to better handle load-balanced RPCs ([#70](https://github.com/TaceoLabs/nodes-helpers/pull/70)) - ([226b6ca](https://github.com/TaceoLabs/nodes-helpers/commit/226b6ca971ac7a6a1f6a8abce1f1ca7ed25b43d8))
+
+
 ## [0.8.1](https://github.com/TaceoLabs/nodes-helpers/compare/v0.8.0...v0.8.1)
 
 ### ⛰️ Features
