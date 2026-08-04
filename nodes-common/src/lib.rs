@@ -40,7 +40,9 @@
 //! * `web3` – [`web3::HttpRpcProvider`],
 //!   [`web3::HttpRpcProviderBuilder`], and [`web3::HttpRpcProviderConfig`]
 //!   for building HTTP Ethereum RPC providers with automatic retry and
-//!   failover, plus ERC-165 interface detection utilities.
+//!   failover, plus ERC-165 interface detection utilities and
+//!   [`web3::GetReceiptExt::get_receipt_with_retry`] for more robust receipt
+//!   fetching.
 //! * `test-utils` (implies `postgres`) – enables the
 //!   [`test_utils`] module of integration-test helpers:
 //!   [`test_utils::postgres_testcontainer`] /

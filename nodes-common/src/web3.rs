@@ -10,8 +10,14 @@
 //! Use [`HttpRpcProviderBuilder`] to build an HTTP RPC provider.
 //! HTTP transports are wrapped with retry and fallback layers to improve
 //! reliability when interacting with RPC endpoints.
+//!
+//! Use [`GetReceiptExt::get_receipt_with_retry`] to reliably wait for a
+//! transaction receipt, working around cases where a load-balanced RPC
+//! endpoint reports a transaction as confirmed but still returns no receipt
+//! for it.
 use core::fmt;
 use std::{
+    future::Future,
     num::NonZeroUsize,
     ops::Deref,
     task::{Context, Poll},
@@ -21,15 +27,16 @@ use std::{
 #[cfg(feature = "web3-asserter")]
 use alloy::providers::mock::Asserter;
 use alloy::{
-    network::EthereumWallet,
+    network::{Ethereum, EthereumWallet},
     primitives::ChainId,
     providers::{
-        DynProvider, Provider, ProviderBuilder,
+        DynProvider, PendingTransactionBuilder, PendingTransactionError, Provider, ProviderBuilder,
         fillers::{BlobGasFiller, ChainIdFiller, NonceManager, SimpleNonceManager},
     },
     rpc::{
         client::RpcClient,
         json_rpc::{RequestPacket, ResponsePacket},
+        types::TransactionReceipt,
     },
     transports::{
         RpcError, Transport, TransportError, TransportErrorKind, TransportFut,
@@ -40,11 +47,13 @@ use alloy::{
         layers::{FallbackLayer, OrRetryPolicyFn, RateLimitRetryPolicy, RetryPolicy},
     },
 };
-use backon::{ExponentialBuilder, Retryable as _};
+use backon::{BackoffBuilder, ExponentialBuilder, Retryable as _};
 use serde::Deserialize;
 use tower::{Layer, Service};
 
 use crate::Environment;
+
+pub use backon;
 
 pub mod erc165;
 pub mod event_stream;
@@ -584,6 +593,105 @@ where
         } else {
             Ok(resp)
         }
+    }
+}
+
+/// Extension trait adding [`get_receipt_with_retry`](GetReceiptExt::get_receipt_with_retry)
+/// to [`PendingTransactionBuilder`].
+pub trait GetReceiptExt: Sized {
+    /// Waits for the receipt of an already-broadcast transaction, re-polling
+    /// by transaction hash if the RPC does not serve the receipt right away.
+    ///
+    /// This works around a gap in `alloy`'s own
+    /// [`PendingTransactionBuilder::get_receipt`]: it retries while a
+    /// transaction is unconfirmed, but once its confirmation watcher sees the
+    /// transaction confirmed and the immediately-following
+    /// `eth_getTransactionReceipt` call returns `null` anyway, it gives up
+    /// with no further retry. This is common behind a load-balanced RPC
+    /// endpoint where the backend serving that second call hasn't caught up
+    /// yet -- the transaction is already on chain, so treating a missing
+    /// receipt as a failed submission is wrong.
+    ///
+    /// Tries [`PendingTransactionBuilder::get_receipt`] first, which already
+    /// waits for the transaction to confirm. If that fails, falls back to
+    /// retrying [`PendingTransactionBuilder::get_receipt`] again on a fresh
+    /// builder for the same transaction hash and required confirmations,
+    /// according to the given `builder` (e.g.
+    /// [`ConstantBuilder`](backon::ConstantBuilder) or [`ExponentialBuilder`])
+    /// until it stops yielding backoff durations.
+    ///
+    /// # Errors
+    ///
+    /// Returns the last [`PendingTransactionError`] seen once retries are
+    /// exhausted.
+    fn get_receipt_with_retry(
+        self,
+        builder: impl BackoffBuilder,
+    ) -> impl Future<Output = Result<TransactionReceipt, PendingTransactionError>> + Send;
+
+    /// Waits for the receipt of an already-broadcast transaction, re-polling
+    /// by transaction hash if the RPC does not serve the receipt right away.
+    ///
+    /// This works around a gap in `alloy`'s own
+    /// [`PendingTransactionBuilder::get_receipt`]: it retries while a
+    /// transaction is unconfirmed, but once its confirmation watcher sees the
+    /// transaction confirmed and the immediately-following
+    /// `eth_getTransactionReceipt` call returns `null` anyway, it gives up
+    /// with no further retry. This is common behind a load-balanced RPC
+    /// endpoint where the backend serving that second call hasn't caught up
+    /// yet -- the transaction is already on chain, so treating a missing
+    /// receipt as a failed submission is wrong.
+    ///
+    /// Tries [`PendingTransactionBuilder::get_receipt`] first, which already
+    /// waits for the transaction to confirm. If that fails, falls back to
+    /// retrying [`PendingTransactionBuilder::get_receipt`] again on a fresh
+    /// builder for the same transaction hash and required confirmations,
+    /// 10 times with a 2-second delay between attempts.
+    ///
+    /// # Errors
+    ///
+    /// Returns the last [`PendingTransactionError`] seen once retries are
+    /// exhausted.
+    fn get_receipt_with_default_retry(
+        self,
+    ) -> impl Future<Output = Result<TransactionReceipt, PendingTransactionError>> + Send {
+        self.get_receipt_with_retry(
+            backon::ConstantBuilder::new()
+                .with_delay(Duration::from_secs(2))
+                .with_max_times(10),
+        )
+    }
+}
+
+impl GetReceiptExt for PendingTransactionBuilder<Ethereum> {
+    async fn get_receipt_with_retry(
+        self,
+        builder: impl BackoffBuilder,
+    ) -> Result<TransactionReceipt, PendingTransactionError> {
+        let tx_hash = *self.tx_hash();
+        let provider = self.provider().clone();
+        let config = self.inner().clone();
+
+        match self.get_receipt().await {
+            Ok(receipt) => return Ok(receipt),
+            Err(err) => {
+                tracing::warn!("no receipt for transaction {tx_hash} yet ({err}), re-polling");
+            }
+        }
+
+        let poll = || async {
+            let pending = PendingTransactionBuilder::from_config(provider.clone(), config.clone());
+            pending.get_receipt().await
+        };
+
+        poll.retry(builder)
+            .sleep(tokio::time::sleep)
+            .notify(|err, dur| {
+                tracing::warn!(
+                    "failed to fetch receipt for transaction {tx_hash} ({err}), retrying in {dur:?}"
+                );
+            })
+            .await
     }
 }
 
