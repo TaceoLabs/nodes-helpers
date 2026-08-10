@@ -141,10 +141,14 @@ fn build_test_http_provider(
 ) -> HttpRpcProvider {
     let mut config =
         HttpRpcProviderConfig::with_default_values(http_urls).expect("test URLs are always valid");
-    config.timeout = timeout;
+    let reqwest_client = reqwest::ClientBuilder::new()
+        .timeout(timeout)
+        .build()
+        .expect("Can build reqwest client");
     config.retry_policy_config = retry_policy_config;
     HttpRpcProviderBuilder::with_config(&config)
         .environment(Environment::Dev)
+        .reqwest_client(reqwest_client)
         .build()
         .expect("HTTP provider should build")
 }

@@ -96,12 +96,6 @@ pub struct HttpRpcProviderConfig {
     /// transactions with this value.
     #[serde(default)]
     pub chain_id: Option<ChainId>,
-    /// The timeout for HTTP requests to the RPC.
-    ///
-    /// Defaults to **10 seconds**.
-    #[serde(default = "HttpRpcProviderConfig::default_timeout")]
-    #[serde(with = "humantime_serde")]
-    pub timeout: Duration,
     /// The poll interval for the confirmation heartbeat for alloy.
     ///
     /// Uses alloy's default setting if omitted. For `dev` environment 250ms
@@ -159,16 +153,10 @@ impl HttpRpcProviderConfig {
             .collect::<reqwest::Result<Vec<_>>>()?;
         Ok(Self {
             http_urls,
-            timeout: Self::default_timeout(),
             confirmations_poll_interval: None,
             chain_id: None,
             retry_policy_config: RetryPolicyConfig::default(),
         })
-    }
-
-    /// Default timeout for HTTP requests to the RPC: 10 seconds
-    fn default_timeout() -> Duration {
-        Duration::from_secs(10)
     }
 }
 
@@ -260,10 +248,10 @@ pub struct HttpRpcProviderBuilder {
     http_urls: Vec<UrlRedacted>,
     retry_policy_config: RetryPolicyConfig,
     chain_id: Option<ChainId>,
-    timeout: Duration,
     confirmations_poll_interval: Option<Duration>,
     is_local: bool,
     wallet: Option<EthereumWallet>,
+    reqwest_client: Option<reqwest::Client>,
 }
 
 impl From<HttpRpcProviderConfig> for HttpRpcProviderBuilder {
@@ -291,11 +279,11 @@ impl HttpRpcProviderBuilder {
         Self {
             http_urls: config.http_urls.clone(),
             retry_policy_config: config.retry_policy_config.clone(),
-            timeout: config.timeout,
             chain_id: config.chain_id,
             is_local: false,
             wallet: None,
             confirmations_poll_interval: config.confirmations_poll_interval,
+            reqwest_client: None,
         }
     }
 
@@ -323,17 +311,19 @@ impl HttpRpcProviderBuilder {
         ))
     }
 
+    /// Explicitly sets the underling `reqwest::Client` for alloy.
+    ///
+    /// If not set, the builder will build a client with default configuration.
+    #[must_use]
+    pub fn reqwest_client(mut self, reqwest_client: reqwest::Client) -> Self {
+        self.reqwest_client = Some(reqwest_client);
+        self
+    }
+
     /// Configures the environment used by the provider.
     #[must_use]
     pub fn environment(mut self, environment: Environment) -> Self {
         self.is_local = environment.is_dev();
-        self
-    }
-
-    /// Sets the timeout for HTTP RPC requests.
-    #[must_use]
-    pub fn http_timeout(mut self, timeout: Duration) -> Self {
-        self.timeout = timeout;
         self
     }
 
@@ -395,16 +385,19 @@ impl HttpRpcProviderBuilder {
             http_urls,
             retry_policy_config,
             chain_id,
-            timeout,
             is_local,
             wallet,
             confirmations_poll_interval,
+            reqwest_client,
         } = self;
 
-        let reqwest = reqwest::ClientBuilder::new()
-            .timeout(timeout)
-            .build()
-            .map_err(TransportErrorKind::custom)?;
+        let reqwest = if let Some(reqwest_client) = reqwest_client {
+            reqwest_client
+        } else {
+            reqwest::ClientBuilder::new()
+                .build()
+                .map_err(TransportErrorKind::custom)?
+        };
 
         let transports = http_urls
             .into_iter()
