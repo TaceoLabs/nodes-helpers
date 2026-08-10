@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+## [0.9.0](https://github.com/TaceoLabs/nodes-helpers/compare/v0.8.2...v0.9.0)
+
+### ⛰️ Features
+
+
+- *(common)* [**breaking**] Add possibility to provide reqwest client for web3 provider - ([1263081](https://github.com/TaceoLabs/nodes-helpers/commit/1263081e91b568e8fa458f189d88625ce3a40942))
+
+### ⚙️ Miscellaneous Tasks
+
+
+- Moved clippy lints to Cargo.toml - ([1092d48](https://github.com/TaceoLabs/nodes-helpers/commit/1092d4862082798da20ee5710e25095652c13b35))
+
+
 ## [0.8.2](https://github.com/TaceoLabs/nodes-helpers/compare/v0.8.1...v0.8.2)
 
 ### ⛰️ Features
