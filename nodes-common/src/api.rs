@@ -59,6 +59,7 @@ where
 ///
 /// Returns `200 OK` with a plain `"healthy"` response if all services already started.
 /// Returns `503 Service Unavailable` with a plain `"starting"`response if one of the services did not start yet.
+#[allow(clippy::needless_pass_by_value, reason = "Needed for axum")]
 fn health(started_services: StartedServices) -> impl IntoResponse {
     if started_services.all_started() {
         (StatusCode::OK, "healthy")
