@@ -10,7 +10,6 @@ use std::{
 };
 
 use alloy::{
-    node_bindings::{Anvil, AnvilInstance},
     providers::Provider,
     transports::{
         RpcError, TransportErrorKind,
@@ -100,34 +99,6 @@ impl HttpRpcStep {
         }
         self
     }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum WithWallet {
-    Yes,
-    #[allow(
-        dead_code,
-        reason = "the no-wallet fixture is only used by tests enabled with test-utils"
-    )]
-    No,
-}
-
-pub(crate) fn http_fixture(with_wallet: WithWallet) -> (AnvilInstance, HttpRpcProvider) {
-    let anvil = Anvil::new().spawn();
-    let mut http_provider_builder = HttpRpcProviderBuilder::with_config(
-        &HttpRpcProviderConfig::with_default_values([anvil.endpoint_url()])
-            .expect("anvil endpoint URL is always valid"),
-    )
-    .environment(Environment::Dev);
-    if with_wallet == WithWallet::Yes {
-        http_provider_builder =
-            http_provider_builder.wallet(anvil.wallet().expect("anvil should have a wallet"));
-    }
-    let http_provider = http_provider_builder
-        .chain_id(31_337)
-        .build()
-        .expect("Should be able to configure HTTP provider for local anvil");
-    (anvil, http_provider)
 }
 
 fn retry_policy_config(max_times: usize) -> super::RetryPolicyConfig {

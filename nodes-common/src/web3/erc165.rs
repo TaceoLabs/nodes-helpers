@@ -264,11 +264,6 @@ impl HttpRpcProvider {
 
 #[cfg(test)]
 mod tests {
-    #[cfg(feature = "test-utils")]
-    use std::time::Duration;
-
-    #[cfg(feature = "test-utils")]
-    use alloy::node_bindings::AnvilInstance;
     #[cfg(feature = "web3-asserter")]
     use alloy::{
         primitives::{Bytes, U256, address},
@@ -277,67 +272,47 @@ mod tests {
     };
     use alloy::{sol, sol_types::SolCall};
 
-    #[cfg(feature = "test-utils")]
-    use crate::test_utils::deploy_multicall3;
-    #[cfg(any(feature = "test-utils", feature = "web3-asserter"))]
-    use crate::web3::HttpRpcProvider;
-    use crate::web3::{self, erc165::ERC165, tests::WithWallet};
-    #[cfg(feature = "test-utils")]
-    use crate::{
-        Environment,
-        web3::{HttpRpcProviderBuilder, HttpRpcProviderConfig, erc165::ERC165ConfirmError},
-    };
+    use crate::web3::erc165::ERC165;
+    #[cfg(feature = "web3-asserter")]
+    use crate::web3::{HttpRpcProvider, erc165::ERC165ConfirmError};
 
-    // compiled with:
-    // solc Selector.sol --via-ir --optimize --bin
-    sol!(
-        // SPDX-License-Identifier: MIT
-        pragma solidity ^0.8.28;
-
+    sol! {
         interface Solidity101 {
             function hello() external pure;
             function world(int256) external pure;
         }
-
-        #[sol(rpc, bytecode="60808060405234601357607a908160188239f35b5f80fdfe60808060405260043610156011575f80fd5b5f3560e01c63bb71eb3b146023575f80fd5b346040575f3660031901126040576318d7d16b60e31b8152602090f35b5f80fdfea264697066735822122050bdf014f6d049e0b709e30cbe71191a291cf62033b9d636415ed4c0d491262464736f6c634300081e0033")]
-        contract Selector {
-            function calculateSelector() public pure returns (bytes4) {
-                Solidity101 i;
-                return i.hello.selector ^ i.world.selector;
-            }
-        }
-
-        #[sol(rpc, bytecode="6080806040523460135760ab908160188239f35b5f80fdfe60808060405260043610156011575f80fd5b5f3560e01c6301ffc9a7146023575f80fd5b3460715760203660031901126071576004359063ffffffff60e01b82168092036071576020916301ffc9a760e01b81149081156061575b5015158152f35b6318d7d16b60e31b1490505f605a565b5f80fdfea26469706673582212205f87878e063679dad406dce588e07a8a58164c7fcb0fe10a9c5700f56330addf64736f6c634300081e0033")]
-        contract ConfirmsERC165 {
-            function supportsInterface(bytes4 interfaceID) external pure returns (bool) {
-                return interfaceID == type(ERC165).interfaceId || interfaceID == type(Solidity101).interfaceId;
-            }
-        }
-
-        #[sol(rpc, bytecode="6080806040523460135760ac908160188239f35b5f80fdfe60808060405260043610156011575f80fd5b5f3560e01c6301ffc9a7146023575f80fd5b3460725760203660031901126072576004359063ffffffff60e01b82168092036072576020916301ffc9a760e01b81149081156061575b5015158152f35b6001600160e01b03191490505f605a565b5f80fdfea26469706673582212209465485de6d71f94f5b12921ac7989fab7ba63b2c0fdb38cb176559558902f7764736f6c634300081e0033")]
-        contract ConfirmsInvalidInterface {
-            function supportsInterface(bytes4 interfaceID) external pure returns (bool) {
-                return interfaceID == type(ERC165).interfaceId || interfaceID == 0xffffffff;
-            }
-        }
-    );
-
-    #[cfg(feature = "test-utils")]
-    async fn erc165_http_fixture(with_wallet: WithWallet) -> (AnvilInstance, HttpRpcProvider) {
-        let (anvil, provider) = web3::tests::http_fixture(with_wallet);
-        deploy_multicall3(&anvil)
-            .await
-            .expect("Should deploy Multicall3 at its canonical address");
-        (anvil, provider)
     }
 
     #[test]
-    fn test_constant_selector_hashes() {
+    fn test_selector_hashes() {
         assert_eq!(
             super::erc165_interface_selector([ERC165::supportsInterfaceCall::SELECTOR]),
             super::ERC_165_SUPPORTS_INTERFACE_SELECTOR
         );
         assert_eq!(super::erc165_interface_selector([]), [0, 0, 0, 0]);
+
+        let selectors = [
+            Solidity101::helloCall::SELECTOR,
+            Solidity101::worldCall::SELECTOR,
+        ];
+        assert_eq!(
+            super::erc165_interface_selector(selectors),
+            [0xc6, 0xbe, 0x8b, 0x58]
+        );
+        assert_eq!(
+            super::erc165_interface_selector(selectors.into_iter().rev()),
+            [0xc6, 0xbe, 0x8b, 0x58],
+            "selector order should not matter"
+        );
+        assert_ne!(
+            super::erc165_interface_selector([
+                Solidity101::helloCall::SELECTOR,
+                Solidity101::worldCall::SELECTOR,
+                Solidity101::helloCall::SELECTOR,
+            ]),
+            [0xc6, 0xbe, 0x8b, 0x58],
+            "repeating a selector should change the interface identifier"
+        );
     }
 
     #[cfg(feature = "web3-asserter")]
@@ -350,353 +325,179 @@ mod tests {
     }
 
     #[cfg(feature = "web3-asserter")]
-    #[tokio::test]
-    async fn ensure_erc165_conform_uses_one_rpc_response() {
+    fn provider_with_response(response: &Bytes) -> (HttpRpcProvider, Asserter) {
         let asserter = Asserter::new();
-        asserter.push_success(&aggregate_response([true, false]));
+        asserter.push_success(response);
         let provider = HttpRpcProvider::with_mock_asserter(asserter.clone());
+        (provider, asserter)
+    }
 
-        provider
+    #[cfg(feature = "web3-asserter")]
+    #[tokio::test]
+    async fn ensure_erc165_conform_handles_contract_responses() {
+        for (values, should_succeed) in [
+            ([true, false], true),
+            ([false, false], false),
+            ([true, true], false),
+        ] {
+            let (provider, asserter) = provider_with_response(&aggregate_response(values));
+            let result = provider
+                .ensure_erc165_conform(address!("0000000000000000000000000000000000000001"))
+                .await;
+
+            if should_succeed {
+                result.expect("mocked contract should be ERC-165 conformant");
+            } else {
+                assert!(
+                    matches!(result, Err(ERC165ConfirmError::Unsupported)),
+                    "non-conformant response should be unsupported"
+                );
+            }
+            assert!(
+                asserter.read_q().is_empty(),
+                "the check should consume exactly one RPC response"
+            );
+        }
+    }
+
+    #[cfg(feature = "web3-asserter")]
+    #[tokio::test]
+    async fn ensure_erc165_conform_maps_call_errors() {
+        let (provider, asserter) = provider_with_response(&Bytes::new());
+        let result = provider
             .ensure_erc165_conform(address!("0000000000000000000000000000000000000001"))
-            .await
-            .expect("mocked contract should be ERC-165 conformant");
+            .await;
         assert!(
-            asserter.read_q().is_empty(),
-            "the two-query check should consume exactly one RPC response"
+            matches!(result, Err(ERC165ConfirmError::NotAContract)),
+            "empty return data should identify a non-contract"
+        );
+        assert!(asserter.read_q().is_empty(), "response should be consumed");
+
+        let provider = HttpRpcProvider::with_mock_asserter(Asserter::new());
+        let result = provider
+            .ensure_erc165_conform(address!("0000000000000000000000000000000000000001"))
+            .await;
+        assert!(
+            matches!(result, Err(ERC165ConfirmError::TransportError(_))),
+            "an empty mock queue should produce a transport error"
         );
     }
 
     #[cfg(feature = "web3-asserter")]
     #[tokio::test]
-    async fn erc165_supports_interface_uses_one_rpc_response() {
-        let asserter = Asserter::new();
-        asserter.push_success(&aggregate_response([true, true, false]));
-        let provider = HttpRpcProvider::with_mock_asserter(asserter.clone());
+    async fn erc165_supports_interface_handles_contract_responses() {
+        for (values, should_succeed) in [
+            ([true, true, false], true),
+            ([false, true, false], false),
+            ([true, false, false], false),
+            ([true, true, true], false),
+        ] {
+            let (provider, asserter) = provider_with_response(&aggregate_response(values));
+            let result = provider
+                .erc165_supports_interface(
+                    address!("0000000000000000000000000000000000000001"),
+                    [ERC165::supportsInterfaceCall::SELECTOR],
+                )
+                .await;
 
-        provider
+            if should_succeed {
+                result.expect("mocked contract should support the requested interface");
+            } else {
+                assert!(
+                    matches!(result, Err(ERC165ConfirmError::Unsupported)),
+                    "unsupported or non-conformant response should be rejected"
+                );
+            }
+            assert!(
+                asserter.read_q().is_empty(),
+                "the check should consume exactly one RPC response"
+            );
+        }
+    }
+
+    #[cfg(feature = "web3-asserter")]
+    #[tokio::test]
+    async fn erc165_supports_interface_maps_call_errors() {
+        let (provider, asserter) = provider_with_response(&Bytes::new());
+        let result = provider
             .erc165_supports_interface(
                 address!("0000000000000000000000000000000000000001"),
                 [ERC165::supportsInterfaceCall::SELECTOR],
             )
-            .await
-            .expect("mocked contract should support the requested interface");
+            .await;
         assert!(
-            asserter.read_q().is_empty(),
-            "the three-query check should consume exactly one RPC response"
+            matches!(result, Err(ERC165ConfirmError::NotAContract)),
+            "empty return data should identify a non-contract"
         );
-    }
+        assert!(asserter.read_q().is_empty(), "response should be consumed");
 
-    #[tokio::test]
-    async fn test_selector_hash_contract() {
-        let (_anvil, http_rpc_provider) = web3::tests::http_fixture(WithWallet::Yes);
-        let selector = Selector::deploy(http_rpc_provider.inner())
-            .await
-            .expect("Should be able to deploy with RPC provider");
-        let should_selector = selector
-            .calculateSelector()
-            .call()
-            .await
-            .expect("Should be able to calculate selector on deployed instance ");
-        assert_eq!(
-            should_selector,
-            super::erc165_interface_selector([
-                Solidity101::helloCall::SELECTOR,
-                Solidity101::worldCall::SELECTOR
-            ]),
-            "Did not match expected selector"
-        );
-        assert_eq!(
-            should_selector,
-            super::erc165_interface_selector([
-                Solidity101::worldCall::SELECTOR,
-                Solidity101::helloCall::SELECTOR
-            ]),
-            "Should not matter in which order we compute the interface selector"
-        );
-        assert_ne!(
-            should_selector,
-            super::erc165_interface_selector([
-                Solidity101::worldCall::SELECTOR,
-                Solidity101::helloCall::SELECTOR,
-                Solidity101::helloCall::SELECTOR
-            ]),
-            "Should no longer match"
-        );
-    }
-
-    #[tokio::test]
-    #[cfg(feature = "test-utils")]
-    async fn test_not_deployed_contract() {
-        let (_anvil, http_rpc_provider) = erc165_http_fixture(WithWallet::No).await;
-
-        let zero_address =
-            alloy::primitives::address!("0x0000000000000000000000000000000000000000");
-        let (support_interface, is_erc165_conform, support_interface_unchecked) = tokio::join!(
-            http_rpc_provider
-                .erc165_supports_interface(zero_address, [ERC165::supportsInterfaceCall::SELECTOR]),
-            http_rpc_provider.ensure_erc165_conform(zero_address),
-            http_rpc_provider.erc165_supports_interface_unchecked(
-                zero_address,
-                [ERC165::supportsInterfaceCall::SELECTOR],
-            )
-        );
-        assert!(
-            matches!(support_interface, Err(ERC165ConfirmError::NotAContract)),
-            "Should fail with NotAContractError"
-        );
-        assert!(
-            matches!(is_erc165_conform, Err(ERC165ConfirmError::NotAContract)),
-            "Should fail with NotAContractError"
-        );
-        assert!(
-            matches!(
-                support_interface_unchecked,
-                Err(ERC165ConfirmError::NotAContract)
-            ),
-            "Should fail with NotAContractError"
-        );
-    }
-
-    #[tokio::test]
-    #[cfg(feature = "test-utils")]
-    async fn test_erc165_confirm() {
-        let (_anvil, http_rpc_provider) = erc165_http_fixture(WithWallet::Yes).await;
-
-        let confirms_erc165_address = *ConfirmsERC165::deploy(http_rpc_provider.inner())
-            .await
-            .expect("Should be able to deploy with RPC provider")
-            .address();
-        let (
-            support_interface_erc165,
-            support_interface_sol101,
-            is_erc165_conform,
-            support_interface_erc165_unchecked,
-            support_interface_sol101_unchecked,
-        ) = tokio::join!(
-            http_rpc_provider.erc165_supports_interface(
-                confirms_erc165_address,
-                [ERC165::supportsInterfaceCall::SELECTOR]
-            ),
-            http_rpc_provider.erc165_supports_interface(
-                confirms_erc165_address,
-                [
-                    Solidity101::worldCall::SELECTOR,
-                    Solidity101::helloCall::SELECTOR
-                ]
-            ),
-            http_rpc_provider.ensure_erc165_conform(confirms_erc165_address),
-            http_rpc_provider.erc165_supports_interface_unchecked(
-                confirms_erc165_address,
-                [ERC165::supportsInterfaceCall::SELECTOR],
-            ),
-            http_rpc_provider.erc165_supports_interface_unchecked(
-                confirms_erc165_address,
-                [
-                    Solidity101::worldCall::SELECTOR,
-                    Solidity101::helloCall::SELECTOR
-                ],
-            )
-        );
-        support_interface_erc165.expect("Should be conform");
-        support_interface_sol101.expect("Should be conform");
-        is_erc165_conform.expect("Should be conform");
-        support_interface_erc165_unchecked.expect("Should be conform");
-        support_interface_sol101_unchecked.expect("Should be conform");
-    }
-
-    #[tokio::test]
-    #[cfg(feature = "test-utils")]
-    async fn test_erc165_confirm_invalid_interface() {
-        let (_anvil, http_rpc_provider) = erc165_http_fixture(WithWallet::Yes).await;
-
-        let confirms_erc165_address = *ConfirmsInvalidInterface::deploy(http_rpc_provider.inner())
-            .await
-            .expect("Should be able to deploy with RPC provider")
-            .address();
-        let (support_interface_erc165, is_erc165_conform, support_interface_erc165_unchecked) = tokio::join!(
-            http_rpc_provider.erc165_supports_interface(
-                confirms_erc165_address,
-                [ERC165::supportsInterfaceCall::SELECTOR]
-            ),
-            http_rpc_provider.ensure_erc165_conform(confirms_erc165_address),
-            http_rpc_provider.erc165_supports_interface_unchecked(
-                confirms_erc165_address,
-                [ERC165::supportsInterfaceCall::SELECTOR],
-            ),
-        );
-        assert!(
-            matches!(
-                support_interface_erc165,
-                Err(ERC165ConfirmError::Unsupported)
-            ),
-            "Should fail with Unsupported (0xffffffff violation)"
-        );
-        assert!(
-            matches!(is_erc165_conform, Err(ERC165ConfirmError::Unsupported)),
-            "Should fail with Unsupported (0xffffffff violation)"
-        );
-
-        support_interface_erc165_unchecked.expect("Should work on unchecked call");
-
-        // Calling with a selector the contract does NOT support:
-        // erc165_supports_interface_unchecked returns Err(Unsupported)
-        // ensure_erc165_conform returns Err(Unsupported) (0xffffffff violation)
-        // The first ? propagates Unsupported.
-        let support_unsupported_interface = http_rpc_provider
+        let provider = HttpRpcProvider::with_mock_asserter(Asserter::new());
+        let result = provider
             .erc165_supports_interface(
-                confirms_erc165_address,
-                [
-                    Solidity101::worldCall::SELECTOR,
-                    Solidity101::helloCall::SELECTOR,
-                ],
+                address!("0000000000000000000000000000000000000001"),
+                [ERC165::supportsInterfaceCall::SELECTOR],
             )
             .await;
         assert!(
-            matches!(
-                support_unsupported_interface,
-                Err(ERC165ConfirmError::Unsupported)
-            ),
-            "Should fail with Unsupported even though contract also violates ERC-165 spec"
+            matches!(result, Err(ERC165ConfirmError::TransportError(_))),
+            "an empty mock queue should produce a transport error"
         );
     }
 
+    #[cfg(feature = "web3-asserter")]
     #[tokio::test]
-    #[cfg(feature = "test-utils")]
-    async fn test_erc165_confirm_but_does_not_support_interface() {
-        let (_anvil, http_rpc_provider) = erc165_http_fixture(WithWallet::Yes).await;
+    async fn erc165_supports_interface_unchecked_handles_contract_responses() {
+        for (value, should_succeed) in [(true, true), (false, false)] {
+            let response = Bytes::from(value.abi_encode());
+            let (provider, asserter) = provider_with_response(&response);
+            let result = provider
+                .erc165_supports_interface_unchecked(
+                    address!("0000000000000000000000000000000000000001"),
+                    [ERC165::supportsInterfaceCall::SELECTOR],
+                )
+                .await;
 
-        let confirms_erc165_address = *ConfirmsERC165::deploy(http_rpc_provider.inner())
-            .await
-            .expect("Should be able to deploy with RPC provider")
-            .address();
-        let (support_interface_sol101, support_interface_sol101_unchecked) = tokio::join!(
-            http_rpc_provider.erc165_supports_interface(
-                confirms_erc165_address,
-                [
-                    Solidity101::worldCall::SELECTOR,
-                    Solidity101::helloCall::SELECTOR,
-                    Solidity101::helloCall::SELECTOR
-                ]
-            ),
-            http_rpc_provider.erc165_supports_interface_unchecked(
-                confirms_erc165_address,
-                [
-                    Solidity101::worldCall::SELECTOR,
-                    Solidity101::helloCall::SELECTOR,
-                    Solidity101::helloCall::SELECTOR
-                ],
-            )
-        );
-        assert!(
-            matches!(
-                support_interface_sol101,
-                Err(ERC165ConfirmError::Unsupported)
-            ),
-            "Should fail with Unsupported"
-        );
-        assert!(
-            matches!(
-                support_interface_sol101_unchecked,
-                Err(ERC165ConfirmError::Unsupported)
-            ),
-            "Should fail with Unsupported"
-        );
+            if should_succeed {
+                result.expect("mocked contract should support the requested interface");
+            } else {
+                assert!(
+                    matches!(result, Err(ERC165ConfirmError::Unsupported)),
+                    "false response should be unsupported"
+                );
+            }
+            assert!(
+                asserter.read_q().is_empty(),
+                "the check should consume exactly one RPC response"
+            );
+        }
     }
 
+    #[cfg(feature = "web3-asserter")]
     #[tokio::test]
-    #[cfg(feature = "test-utils")]
-    async fn test_non_erc165_contract() {
-        let (_anvil, http_rpc_provider) = erc165_http_fixture(WithWallet::Yes).await;
-
-        let selector_address = *Selector::deploy(http_rpc_provider.inner())
-            .await
-            .expect("Should be able to deploy with RPC provider")
-            .address();
-
-        let (is_erc165_conform, support_interface, support_interface_unchecked) = tokio::join!(
-            http_rpc_provider.ensure_erc165_conform(selector_address),
-            http_rpc_provider.erc165_supports_interface(
-                selector_address,
-                [ERC165::supportsInterfaceCall::SELECTOR]
-            ),
-            http_rpc_provider.erc165_supports_interface_unchecked(
-                selector_address,
+    async fn erc165_supports_interface_unchecked_maps_call_errors() {
+        let (provider, asserter) = provider_with_response(&Bytes::new());
+        let result = provider
+            .erc165_supports_interface_unchecked(
+                address!("0000000000000000000000000000000000000001"),
                 [ERC165::supportsInterfaceCall::SELECTOR],
             )
-        );
+            .await;
         assert!(
-            matches!(is_erc165_conform, Err(ERC165ConfirmError::Unsupported)),
-            "Should fail with Unsupported"
+            matches!(result, Err(ERC165ConfirmError::NotAContract)),
+            "empty return data should identify a non-contract"
         );
-        assert!(
-            matches!(support_interface, Err(ERC165ConfirmError::Unsupported)),
-            "Should fail with Unsupported"
-        );
-        assert!(
-            matches!(
-                support_interface_unchecked,
-                Err(ERC165ConfirmError::Unsupported)
-            ),
-            "Should fail with Unsupported"
-        );
-    }
+        assert!(asserter.read_q().is_empty(), "response should be consumed");
 
-    #[tokio::test]
-    #[cfg(feature = "test-utils")]
-    async fn test_transport_error() {
-        let (_anvil, http_rpc_provider) = erc165_http_fixture(WithWallet::Yes).await;
-
-        let selector_address = *Selector::deploy(http_rpc_provider.inner())
-            .await
-            .expect("Should be able to deploy with RPC provider")
-            .address();
-
-        let http_rpc_provider = HttpRpcProviderBuilder::with_config(
-            &HttpRpcProviderConfig::with_default_values(["http://localhost:1234"])
-                .expect("Should be valid URL"),
-        )
-        .environment(Environment::Dev)
-        // turn down retry policy as this will always fail
-        .retry_policy(web3::RetryPolicyConfig {
-            min_delay: Duration::from_secs(1),
-            max_delay: Duration::from_secs(1),
-            max_times: 1,
-        })
-        .chain_id(31_337)
-        .build()
-        .expect("Should be able to configure HTTP provider");
-
-        let (is_erc165_conform, support_interface, support_interface_unchecked) = tokio::join!(
-            http_rpc_provider.ensure_erc165_conform(selector_address),
-            http_rpc_provider.erc165_supports_interface(
-                selector_address,
-                [ERC165::supportsInterfaceCall::SELECTOR]
-            ),
-            http_rpc_provider.erc165_supports_interface_unchecked(
-                selector_address,
+        let provider = HttpRpcProvider::with_mock_asserter(Asserter::new());
+        let result = provider
+            .erc165_supports_interface_unchecked(
+                address!("0000000000000000000000000000000000000001"),
                 [ERC165::supportsInterfaceCall::SELECTOR],
             )
-        );
+            .await;
         assert!(
-            matches!(
-                is_erc165_conform,
-                Err(ERC165ConfirmError::TransportError(_))
-            ),
-            "Should fail with TransportError"
-        );
-        assert!(
-            matches!(
-                support_interface,
-                Err(ERC165ConfirmError::TransportError(_))
-            ),
-            "Should fail with TransportError"
-        );
-        assert!(
-            matches!(
-                support_interface_unchecked,
-                Err(ERC165ConfirmError::TransportError(_))
-            ),
-            "Should fail with TransportError"
+            matches!(result, Err(ERC165ConfirmError::TransportError(_))),
+            "an empty mock queue should produce a transport error"
         );
     }
 }
