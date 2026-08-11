@@ -105,6 +105,10 @@ impl HttpRpcStep {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum WithWallet {
     Yes,
+    #[allow(
+        dead_code,
+        reason = "the no-wallet fixture is only used by tests enabled with test-utils"
+    )]
     No,
 }
 
