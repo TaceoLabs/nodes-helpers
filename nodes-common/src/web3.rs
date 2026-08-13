@@ -58,6 +58,7 @@ pub use backon;
 pub mod erc165;
 pub mod event_stream;
 pub mod signers;
+pub mod transaction_handler;
 
 /// A dedicated HTTP RPC provider.
 ///
