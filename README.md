@@ -9,6 +9,7 @@ Workspace with shared helper crates for TACEO MPC nodes.
 | Crate | Description |
 |-------|-------------|
 | [`taceo-nodes-common`](./nodes-common) | Common utilities: health API, PostgreSQL, Ethereum RPC, ERC-165, graceful shutdown |
+| [`taceo-serde-partial-default`](./serde-partial-default) | Derive macro generating `Default` or a `partial_default(...)` constructor from serde default attributes |
 
 ## License
 

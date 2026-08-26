@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["nodes-common"]
+members = ["nodes-common", "serde-partial-default"]
 
 [workspace.package]
 edition = "2024"
@@ -19,11 +19,14 @@ futures = "0.3"
 git-version = "0.3"
 headers = "0.4"
 humantime-serde = "1.1.1"
+proc-macro2 = "1"
+quote = "1"
 reqwest = { version = "0.13", default-features = false }
 reserve-port = "2"
 secrecy = "0.10"
 serde = { version = "1", default-features = false }
 sqlx = { version = "0.8", default-features = false }
+syn = { version = "2", default-features = false }
 testcontainers-modules = { version = "0.15", default-features = false }
 thiserror = "2"
 tokio = { version = "1" }
