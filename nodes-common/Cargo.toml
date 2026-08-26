@@ -79,6 +79,7 @@ serde_json = "1"
 [features]
 default = []
 api = ["dep:axum", "dep:tower-http"]
+axum-test = ["dep:axum-test", "test-utils"]
 middleware = []
 postgres = [
   "dep:backon",
@@ -96,7 +97,6 @@ test-utils = [
   "alloy/provider-anvil-api",
   "alloy/providers",
   "dep:alloy",
-  "dep:axum-test",
   "dep:eyre",
   "dep:reserve-port",
   "dep:testcontainers-modules",

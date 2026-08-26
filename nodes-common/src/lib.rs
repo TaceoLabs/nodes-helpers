@@ -29,8 +29,10 @@
 //!   [`test_utils::postgres_testcontainer`] /
 //!   [`test_utils::shared_postgres_testcontainer`] for ephemeral Postgres
 //!   containers, [`test_utils::next_test_schema`] for isolated schema names,
-//!   [`test_utils::random_port`], and [`test_utils::test_server`] for spinning
-//!   up an Axum test server.
+//!   and [`test_utils::random_port`].
+//! * `axum-test` (implies `test-utils`) – adds the [`test_utils::axum_test`]
+//!   re-export and [`test_utils::test_server`] for spinning up an Axum test
+//!   server.
 //! * `web3-asserter` (implies `web3`) – adds
 //!   [`web3::HttpRpcProvider::with_mock_asserter`] (and a matching
 //!   `From<Asserter>` impl) for building a provider backed by Alloy's mocked
