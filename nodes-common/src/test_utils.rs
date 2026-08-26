@@ -1,6 +1,9 @@
 //! Utilities for testing nodes.
 
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{
+    Arc, Weak,
+    atomic::{AtomicU64, Ordering},
+};
 
 use alloy::{
     hex,
@@ -15,7 +18,7 @@ use testcontainers_modules::{
     postgres::Postgres,
     testcontainers::{ContainerAsync, runners::AsyncRunner as _},
 };
-use tokio::sync::OnceCell;
+use tokio::sync::Mutex;
 
 use crate::postgres::SanitizedSchema;
 
@@ -56,21 +59,37 @@ pub async fn postgres_testcontainer() -> eyre::Result<(ContainerAsync<Postgres>,
     Ok((postgres_container, connection_string))
 }
 
-/// Returns a connection string to a process-wide shared Postgres container.
-/// Started lazily on the first call; the container lives until process exit.
+/// Handle to the process-wide shared Postgres container.
+///
+/// The container is removed once the last handle is dropped. Handles must be
+/// dropped inside a tokio runtime context (true for `#[tokio::test]` bodies).
+pub struct SharedPostgres {
+    _container: ContainerAsync<Postgres>,
+    /// Connection string to the shared Postgres container.
+    pub connection_string: String,
+}
+
+/// Returns a handle to a process-wide shared Postgres container.
+///
+/// Started lazily; the container lives while at least one handle is alive and
+/// may be restarted if uses do not overlap in time.
 ///
 /// # Errors
 ///
 /// Returns an error if the Postgres container could not be started.
-pub async fn shared_postgres_testcontainer() -> eyre::Result<&'static str> {
-    static SHARED_PG: OnceCell<(ContainerAsync<Postgres>, String)> = OnceCell::const_new();
-    let shared = SHARED_PG
-        .get_or_try_init(|| async {
-            let (container, connection_string) = postgres_testcontainer().await?;
-            eyre::Ok((container, connection_string))
-        })
-        .await?;
-    Ok(&shared.1)
+pub async fn shared_postgres_testcontainer() -> eyre::Result<Arc<SharedPostgres>> {
+    static SHARED_PG: Mutex<Weak<SharedPostgres>> = Mutex::const_new(Weak::new());
+    let mut guard = SHARED_PG.lock().await;
+    if let Some(pg) = guard.upgrade() {
+        return Ok(pg);
+    }
+    let (container, connection_string) = postgres_testcontainer().await?;
+    let pg = Arc::new(SharedPostgres {
+        _container: container,
+        connection_string,
+    });
+    *guard = Arc::downgrade(&pg);
+    Ok(pg)
 }
 
 /// Wrapper function to get a random free port for tests without having to add the `reserve_port` crate directly.
