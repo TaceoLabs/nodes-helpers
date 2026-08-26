@@ -23,6 +23,10 @@ impl AwsSignerConfig {
     ///
     /// Returns an error if the AWS KMS client fails to fetch the public key
     /// or otherwise initialize the signer for the configured `key_id`.
+    #[expect(
+        clippy::result_large_err,
+        reason = "need to be fixed upstream by aws crate"
+    )]
     pub async fn into_signer(
         self,
         sdk_config: &aws_config::SdkConfig,
