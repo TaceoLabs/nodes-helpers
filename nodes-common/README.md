@@ -15,11 +15,12 @@ No features are enabled by default; enable the ones you need.
 | `web3` | | HTTP Ethereum RPC provider via Alloy, ERC-165 interface detection |
 | `web3-asserter` | | Alloy mocked-provider constructor for `HttpRpcProvider` (tests) |
 | `api` | | Health and version endpoints via Axum |
+| `axum-test` | | Axum test-server helper and `axum-test` re-export; implies `test-utils` |
 | `postgres` | | PostgreSQL connection pool via SQLx |
 | `serde` | | Serde support |
 | `middleware` | | Axum/Tower middleware layers |
 | `unkey` | | Bearer-token verification via the Unkey API |
-| `test-utils` | | Integration-test helpers: Postgres testcontainers, test schemas, Axum test server |
+| `test-utils` | | Integration-test helpers: Postgres testcontainers, test schemas, Anvil, and random ports |
 
 ## License
 

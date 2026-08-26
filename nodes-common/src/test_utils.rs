@@ -11,6 +11,7 @@ use alloy::{
     primitives::{Address, Bytes, address},
     providers::{Provider, ProviderBuilder, ext::AnvilApi},
 };
+#[cfg(feature = "axum-test")]
 use axum_test::{TestServer, transport_layer::IntoTransportLayer};
 use eyre::Context;
 use sqlx::{Connection as _, Executor as _, PgConnection};
@@ -22,6 +23,7 @@ use tokio::sync::Mutex;
 
 use crate::postgres::SanitizedSchema;
 
+#[cfg(feature = "axum-test")]
 pub use axum_test;
 
 /// Canonical Multicall3 address (same on all EVM chains).
@@ -106,6 +108,7 @@ pub fn random_port() -> eyre::Result<u16> {
 /// # Panics
 ///
 /// Panics if the test server could not be started.
+#[cfg(feature = "axum-test")]
 pub fn test_server<A: IntoTransportLayer>(app: A) -> (TestServer, String) {
     let server = TestServer::builder().http_transport().build(app);
     let url = server
