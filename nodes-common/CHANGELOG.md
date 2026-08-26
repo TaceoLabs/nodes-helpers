@@ -2,6 +2,30 @@
 
 ## [Unreleased]
 
+## [0.10.0](https://github.com/TaceoLabs/nodes-helpers/compare/v0.9.0...v0.10.0)
+
+### 🐛 Bug Fixes
+
+
+- *(common)* [**breaking**] Shared postgres container now cleans up in test binaries - ([adeef07](https://github.com/TaceoLabs/nodes-helpers/commit/adeef071d8bbabba7238f55d9f1e42f64c2b9ee6))
+
+### 🚜 Refactor
+
+
+- *(common)* [**breaking**] Move test-utils to dedicated feature - ([0f9014b](https://github.com/TaceoLabs/nodes-helpers/commit/0f9014bc8bfdb8e66ee9d21982072f433d1c59de))
+- *(common)* Use multicall for erc165 over tokio::join - ([1a6f59a](https://github.com/TaceoLabs/nodes-helpers/commit/1a6f59af387b6c1d411171ff55cbcfb6c4b27fee))
+
+### 🧪 Testing
+
+
+- *(common)* Remove compiled sol contracts and use mock asserter - ([3c7dcbe](https://github.com/TaceoLabs/nodes-helpers/commit/3c7dcbe14792f5e76bcddf10cc1fded5c45ac202))
+
+### ⚙️ Miscellaneous Tasks
+
+
+- Expect a clippy lint - ([aa1cac9](https://github.com/TaceoLabs/nodes-helpers/commit/aa1cac99cfcac5f699eb3bc0b0bc36d6ba78d7b5))
+
+
 ## [0.9.0](https://github.com/TaceoLabs/nodes-helpers/compare/v0.8.2...v0.9.0)
 
 ### ⛰️ Features
