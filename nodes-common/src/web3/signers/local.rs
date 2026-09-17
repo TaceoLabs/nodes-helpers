@@ -23,6 +23,15 @@ pub struct PrivateKeySignerConfig {
 }
 
 impl PrivateKeySignerConfig {
+    /// Creates a new config from a private key and optional chain ID.
+    #[must_use]
+    pub fn new(private_key: SecretString, chain_id: Option<u64>) -> Self {
+        Self {
+            private_key,
+            chain_id,
+        }
+    }
+
     /// Builds a [`PrivateKeySigner`] from the configured private key.
     ///
     /// # Errors

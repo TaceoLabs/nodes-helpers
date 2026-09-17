@@ -43,7 +43,30 @@ pub struct GcpSignerConfig {
 }
 
 impl GcpSignerConfig {
+    /// Creates a new config from key coordinates and an optional chain ID.
+    #[must_use]
+    pub fn new(
+        project_id: String,
+        location: String,
+        keyring: String,
+        key_name: String,
+        key_version: u64,
+        chain_id: Option<u64>,
+    ) -> Self {
+        Self {
+            project_id,
+            location,
+            keyring,
+            key_name,
+            key_version,
+            chain_id,
+        }
+    }
+
     /// Builds a [`GcpSigner`] from this configuration.
+    ///
+    /// Has no internal timeout; wrap the call (e.g. in `tokio::time::timeout`)
+    /// if a boot deadline is needed.
     ///
     /// # Errors
     ///
