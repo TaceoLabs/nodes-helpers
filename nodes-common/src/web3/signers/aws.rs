@@ -18,7 +18,16 @@ pub struct AwsSignerConfig {
 }
 
 impl AwsSignerConfig {
+    /// Creates a new config from a KMS key ID and optional chain ID.
+    #[must_use]
+    pub fn new(key_id: String, chain_id: Option<u64>) -> Self {
+        Self { key_id, chain_id }
+    }
+
     /// Builds a [`AwsSigner`] from this configuration, using the provided AWS SDK configuration.
+    ///
+    /// Has no internal timeout; wrap the call (e.g. in `tokio::time::timeout`)
+    /// if a boot deadline is needed.
     ///
     /// # Errors
     ///
