@@ -13,6 +13,7 @@ pub struct AwsSignerConfig {
     ///
     /// If `Some`, transactions signed by this signer must match this chain ID.
     /// If `None`, the signer does not check or set the transaction's chain ID.
+    #[serde(default)]
     pub chain_id: Option<u64>,
 }
 
