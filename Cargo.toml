@@ -23,7 +23,7 @@ reqwest = { version = "0.13", default-features = false }
 reserve-port = "2"
 secrecy = "0.10"
 serde = { version = "1", default-features = false }
-sqlx = { version = "0.8", default-features = false }
+sqlx = { version = "0.9", default-features = false }
 testcontainers-modules = { version = "0.15", default-features = false }
 thiserror = "2"
 tokio = { version = "1" }
