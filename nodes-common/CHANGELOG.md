@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+## [0.10.1](https://github.com/TaceoLabs/nodes-helpers/compare/v0.10.0...v0.10.1)
+
+### ⛰️ Features
+
+
+- *(web3)* Add constructors for non_exhaustive signer configs - ([ed989a5](https://github.com/TaceoLabs/nodes-helpers/commit/ed989a5e08145ac16e5c7f67dcd1b12af50c9b2a))
+
+### 🐛 Bug Fixes
+
+
+- *(web3)* Add serde(default) to signer chain_id field - ([5fa80cc](https://github.com/TaceoLabs/nodes-helpers/commit/5fa80cc17dd3d7ba49acd9fab7bf4efae11f90ec))
+
+
 ## [0.10.0](https://github.com/TaceoLabs/nodes-helpers/compare/v0.9.0...v0.10.0)
 
 ### 🐛 Bug Fixes
