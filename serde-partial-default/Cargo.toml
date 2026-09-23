@@ -1,0 +1,20 @@
+[package]
+name = "taceo-serde-partial-default"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+description = "Derive macro generating Default or a partial_default(...) constructor from serde default attributes"
+repository.workspace = true
+license.workspace = true
+publish = true
+
+[lib]
+proc-macro = true
+
+[dependencies]
+proc-macro2 = { workspace = true }
+quote = { workspace = true }
+syn = { workspace = true, features = ["derive", "parsing", "printing", "proc-macro"] }
+
+[dev-dependencies]
+serde = { workspace = true, features = ["derive", "std"] }
