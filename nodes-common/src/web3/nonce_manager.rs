@@ -22,6 +22,7 @@ const NONE: u64 = u64::MAX;
 /// which otherwise leave the cache out of sync forever (see `CachedNonceManager`'s doc comment).
 #[derive(Clone, Debug, Default)]
 pub struct UpdatableCachedNonceManager {
+    /// Per-address cache of the *next* nonce to serve (not the last one served).
     nonces: Arc<DashMap<Address, Arc<Mutex<u64>>>>,
 }
 
@@ -71,15 +72,15 @@ impl NonceManager for UpdatableCachedNonceManager {
         };
 
         let mut nonce = nonce.lock().await;
-        let new_nonce = if *nonce == NONE {
+        if *nonce == NONE {
             // Initialize the nonce if we haven't seen this account before.
             tracing::trace!(%address, "fetching nonce");
-            provider.get_transaction_count(address).pending().await?
+            *nonce = provider.get_transaction_count(address).pending().await?;
         } else {
-            tracing::trace!(%address, current_nonce = *nonce, "incrementing nonce");
-            *nonce + 1
-        };
-        *nonce = new_nonce;
-        Ok(new_nonce)
+            tracing::trace!(%address, next_nonce = *nonce, "using cached nonce");
+        }
+        let to_serve = *nonce;
+        *nonce += 1;
+        Ok(to_serve)
     }
 }
