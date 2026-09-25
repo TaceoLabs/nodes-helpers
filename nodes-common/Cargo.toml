@@ -30,6 +30,7 @@ alloy = { workspace = true, features = [
   "rpc-types",
   "std"
 ], optional = true }
+async-trait = { workspace = true, optional = true }
 axum = { workspace = true, features = [
   "http1",
   "tokio",
@@ -37,6 +38,7 @@ axum = { workspace = true, features = [
 ], optional = true }
 axum-test = { workspace = true, optional = true }
 backon = { workspace = true, features = ["std", "tokio-sleep"], optional = true }
+dashmap = { workspace = true, optional = true }
 eyre = { workspace = true, optional = true }
 futures = { workspace = true, optional = true }
 git-version = { workspace = true }
@@ -120,3 +122,4 @@ web3 = [
   "dep:tower"
 ]
 web3-asserter = ["alloy/providers", "web3"]
+nonce-manager = ["dep:async-trait", "dep:dashmap", "web3"]

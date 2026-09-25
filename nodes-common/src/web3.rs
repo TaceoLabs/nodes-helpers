@@ -57,6 +57,8 @@ pub use backon;
 
 pub mod erc165;
 pub mod event_stream;
+#[cfg(feature = "nonce-manager")]
+pub mod nonce_manager;
 pub mod signers;
 
 /// A dedicated HTTP RPC provider.
