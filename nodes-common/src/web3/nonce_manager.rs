@@ -15,31 +15,46 @@ use tokio::sync::Mutex;
 // Use `u64::MAX` as a sentinel value to indicate that the nonce has not been fetched yet.
 const NONE: u64 = u64::MAX;
 
-/// Invalidatable cached nonce manager
+/// Updatable cached nonce manager
 ///
-/// Like `CachedNonceManager`, but `invalidate` lets a caller invalidate the cached nonce for an address
-/// and force the next call to `get_next_nonce` to fetch it from chain instead of incrementing the cached value.
-/// Used to recover from "nonce too low" errors, which otherwise leave the cache out of sync forever (see `CachedNonceManager`'s doc comment).
+/// Like `CachedNonceManager`, but `update` lets a caller update the cached nonce for an address
+/// by fetching it from chain instead of incrementing the cached value. Used to recover from "nonce too low" errors,
+/// which otherwise leave the cache out of sync forever (see `CachedNonceManager`'s doc comment).
 #[derive(Clone, Debug, Default)]
-pub struct InvalidatableCachedNonceManager {
+pub struct UpdatableCachedNonceManager {
     nonces: Arc<DashMap<Address, Arc<Mutex<u64>>>>,
 }
 
-impl InvalidatableCachedNonceManager {
-    /// Invalidate the cached nonce for the given address, forcing the next call to `get_next_nonce`
-    /// to fetch it from chain instead of incrementing the cached value.
-    pub async fn invalidate(&self, address: Address) {
+impl UpdatableCachedNonceManager {
+    /// Updates the cached nonce for the given address by refetching it from chain and merging
+    /// it into the cache via `max`, so the cache only ever moves forward.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the provider fails to fetch the nonce from chain.
+    pub async fn update<P, N>(&self, provider: &P, address: Address) -> TransportResult<()>
+    where
+        P: Provider<N>,
+        N: Network,
+    {
         if let Some(entry) = self.nonces.get(&address) {
             let nonce = Arc::clone(entry.value());
             drop(entry);
-            *nonce.lock().await = NONE;
+            let mut nonce = nonce.lock().await;
+            let fetched = provider.get_transaction_count(address).pending().await?;
+            *nonce = if *nonce == NONE {
+                fetched
+            } else {
+                fetched.max(*nonce)
+            };
         }
+        Ok(())
     }
 }
 
 #[cfg_attr(target_family = "wasm", async_trait(?Send))]
 #[cfg_attr(not(target_family = "wasm"), async_trait)]
-impl NonceManager for InvalidatableCachedNonceManager {
+impl NonceManager for UpdatableCachedNonceManager {
     async fn get_next_nonce<P, N>(&self, provider: &P, address: Address) -> TransportResult<u64>
     where
         P: Provider<N>,
