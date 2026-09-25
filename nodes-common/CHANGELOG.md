@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+## [0.10.2](https://github.com/TaceoLabs/nodes-helpers/compare/v0.10.1...v0.10.2)
+
+### ⛰️ Features
+
+
+- Add InvalidatableCachedNonceManager - ([e525ac4](https://github.com/TaceoLabs/nodes-helpers/commit/e525ac47b2695d171ef0cdaa69b615b10e466411))
+
+
 ## [0.10.1](https://github.com/TaceoLabs/nodes-helpers/compare/v0.10.0...v0.10.1)
 
 ### ⛰️ Features
