@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+## [0.10.2](https://github.com/TaceoLabs/nodes-helpers/compare/v0.10.1...v0.10.2)
+
+### ⛰️ Features
+
+
+- Add TxSender worker to serialize tx sending in e.g. gateways - ([c0e9c13](https://github.com/TaceoLabs/nodes-helpers/commit/c0e9c13e0b02f8a1edd3a4ce979e6c8477278348))
+
+
 ## [0.10.1](https://github.com/TaceoLabs/nodes-helpers/compare/v0.10.0...v0.10.1)
 
 ### ⛰️ Features
