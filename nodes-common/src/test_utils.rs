@@ -14,7 +14,7 @@ use alloy::{
 #[cfg(feature = "axum-test")]
 use axum_test::{TestServer, transport_layer::IntoTransportLayer};
 use eyre::Context;
-use sqlx::{Connection as _, Executor as _, PgConnection};
+use sqlx::{AssertSqlSafe, Connection as _, Executor as _, PgConnection};
 use testcontainers_modules::{
     postgres::Postgres,
     testcontainers::{ContainerAsync, runners::AsyncRunner as _},
@@ -135,11 +135,13 @@ pub async fn open_pg_connection(
         .await
         .context("while opening PgConnection")?;
 
-    conn.execute(format!("CREATE SCHEMA IF NOT EXISTS \"{schema}\"").as_ref())
-        .await
-        .context("TestUtils: cannot create schema")?;
+    conn.execute(AssertSqlSafe(format!(
+        "CREATE SCHEMA IF NOT EXISTS \"{schema}\""
+    )))
+    .await
+    .context("TestUtils: cannot create schema")?;
 
-    conn.execute(format!("SET search_path TO \"{schema}\"").as_ref())
+    conn.execute(AssertSqlSafe(format!("SET search_path TO \"{schema}\"")))
         .await
         .context("TestUtils: cannot set search path of connection")?;
     Ok(conn)
