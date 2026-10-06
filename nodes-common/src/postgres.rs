@@ -68,7 +68,7 @@ use backon::{BackoffBuilder as _, ConstantBuilder, Retryable as _};
 use secrecy::{ExposeSecret as _, SecretString};
 use serde::{Deserialize, Deserializer, de};
 use sqlx::{
-    Connection, Executor as _, PgConnection, PgPool,
+    AssertSqlSafe, Connection, Executor as _, PgConnection, PgPool,
     postgres::{PgConnectOptions, PgPoolOptions},
 };
 
@@ -242,8 +242,12 @@ async fn maybe_create_schema(config: &PostgresConfig) -> Result<(), sqlx::Error>
         .parse::<PgConnectOptions>()?;
 
     let mut connection = PgConnection::connect_with(&pg_connect_option).await?;
+    // SanitizedSchema permits only ASCII letters, digits, and underscores.
     connection
-        .execute(format!("CREATE SCHEMA IF NOT EXISTS \"{}\"", config.schema).as_ref())
+        .execute(AssertSqlSafe(format!(
+            "CREATE SCHEMA IF NOT EXISTS \"{}\"",
+            config.schema
+        )))
         .await?;
     connection.close().await?;
     Ok(())
@@ -302,7 +306,7 @@ pub async fn pg_pool_with_schema(
         .after_connect(move |conn, _| {
             let schema_connect = schema_connect.clone();
             Box::pin(async move {
-                if let Err(e) = conn.execute(schema_connect.as_ref()).await {
+                if let Err(e) = conn.execute(AssertSqlSafe(schema_connect)).await {
                     tracing::error!("error in after_connect: {:?}", e);
                     return Err(e);
                 }
