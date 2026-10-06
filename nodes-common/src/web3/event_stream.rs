@@ -983,7 +983,7 @@ mod tests {
     fn test_block_ranges_start_greater_than_end() {
         let ranges: Vec<_> =
             block_ranges(10, 5, NonZeroUsize::new(3).expect("3 is non-zero")).collect();
-        assert!(ranges.is_empty());
+        assert_eq!(ranges, []);
     }
 
     #[tokio::test]
