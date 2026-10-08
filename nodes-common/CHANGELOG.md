@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+## [0.10.3](https://github.com/TaceoLabs/nodes-helpers/compare/v0.10.2...v0.10.3)
+
+### ⛰️ Features
+
+
+- Add helper for ser/de for arkworks type in DB context ([#94](https://github.com/TaceoLabs/nodes-helpers/pull/94)) - ([7c30050](https://github.com/TaceoLabs/nodes-helpers/commit/7c30050f72924d7007eed7d961c55d3016a21e1d))
+
+
 ## [0.10.2](https://github.com/TaceoLabs/nodes-helpers/compare/v0.10.1...v0.10.2)
 
 ### ⛰️ Features
