@@ -64,6 +64,7 @@ use std::{
     time::Duration,
 };
 
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use backon::{BackoffBuilder as _, ConstantBuilder, Retryable as _};
 use secrecy::{ExposeSecret as _, SecretString};
 use serde::{Deserialize, Deserializer, de};
@@ -71,6 +72,7 @@ use sqlx::{
     AssertSqlSafe, Connection, Executor as _, PgConnection, PgPool,
     postgres::{PgConnectOptions, PgPoolOptions},
 };
+use zeroize::Zeroizing;
 
 /// A validated `PostgreSQL` schema name.
 ///
@@ -342,4 +344,57 @@ fn is_retryable_error(e: &sqlx::Error) -> bool {
             | sqlx::Error::AnyDriverError(_)
             | sqlx::Error::WorkerCrashed
     )
+}
+
+/// Serializes an Arkworks value as uncompressed bytes for database storage.
+///
+/// The output buffer is zeroized when dropped, including if serialization fails.
+///
+/// # Panics
+///
+/// Panics if the value's Arkworks serializer returns an error.
+#[must_use]
+#[inline]
+pub fn to_db_ark_serialize_uncompressed<T: CanonicalSerialize>(t: &T) -> Zeroizing<Vec<u8>> {
+    let mut bytes = Zeroizing::new(Vec::with_capacity(t.uncompressed_size()));
+    t.serialize_uncompressed(&mut *bytes)
+        .expect("Ark serialization to Vec failed");
+    bytes
+}
+
+/// Deserializes an Arkworks value from owned, uncompressed database bytes.
+///
+/// The input buffer is zeroized after deserialization, including on error.
+///
+/// # Errors
+///
+/// Returns [`sqlx::Error::Decode`] if Arkworks cannot decode or validate the bytes.
+#[inline]
+pub fn from_db_ark_serialize_uncompressed<T: CanonicalDeserialize>(
+    b: Vec<u8>,
+) -> Result<T, sqlx::Error> {
+    let bytes = Zeroizing::new(b);
+    T::deserialize_uncompressed(bytes.as_slice())
+        .map_err(|error| sqlx::Error::Decode(Box::new(error)))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{from_db_ark_serialize_uncompressed, to_db_ark_serialize_uncompressed};
+
+    #[test]
+    fn ark_serialization_round_trip_and_decode_error() {
+        let value = 42_u64;
+        let bytes = to_db_ark_serialize_uncompressed(&value);
+        let decoded: u64 = from_db_ark_serialize_uncompressed(bytes.to_vec())
+            .expect("serialized value should deserialize");
+        assert_eq!(decoded, value);
+
+        let error = from_db_ark_serialize_uncompressed::<u64>(vec![0])
+            .expect_err("truncated bytes should fail to deserialize");
+        assert!(
+            matches!(error, sqlx::Error::Decode(_)),
+            "Arkworks errors should map to SQLx decode errors"
+        );
+    }
 }
