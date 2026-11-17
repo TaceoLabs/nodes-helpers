@@ -43,6 +43,7 @@ futures = { workspace = true, optional = true }
 git-version = { workspace = true }
 headers = { workspace = true, optional = true }
 humantime-serde = { workspace = true, optional = true }
+log = { workspace = true, optional = true }
 reqwest = { workspace = true, features = ["default-tls", "json"], optional = true }
 reserve-port = { workspace = true, optional = true }
 secrecy = { workspace = true, features = ["serde"], optional = true }
@@ -77,6 +78,7 @@ axum-test = { workspace = true }
 eyre.workspace = true
 http-body = "1"
 serde_json = "1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [features]
 default = []
@@ -87,6 +89,7 @@ postgres = [
   "dep:ark-serialize",
   "dep:backon",
   "dep:humantime-serde",
+  "dep:log",
   "dep:secrecy",
   "dep:serde",
   "dep:sqlx",
@@ -124,3 +127,7 @@ web3 = [
   "dep:tower"
 ]
 web3-asserter = ["alloy/providers", "web3"]
+
+[[test]]
+name = "postgres_statement_logging"
+required-features = ["test-utils"]
