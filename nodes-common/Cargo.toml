@@ -78,7 +78,6 @@ axum-test = { workspace = true }
 eyre.workspace = true
 http-body = "1"
 serde_json = "1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [features]
 default = []
@@ -127,7 +126,3 @@ web3 = [
   "dep:tower"
 ]
 web3-asserter = ["alloy/providers", "web3"]
-
-[[test]]
-name = "postgres_statement_logging"
-required-features = ["test-utils"]
