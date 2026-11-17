@@ -69,7 +69,7 @@ use backon::{BackoffBuilder as _, ConstantBuilder, Retryable as _};
 use secrecy::{ExposeSecret as _, SecretString};
 use serde::{Deserialize, Deserializer, de};
 use sqlx::{
-    AssertSqlSafe, Connection, Executor as _, PgConnection, PgPool,
+    AssertSqlSafe, ConnectOptions as _, Connection, Executor as _, PgConnection, PgPool,
     postgres::{PgConnectOptions, PgPoolOptions},
 };
 use zeroize::Zeroizing;
@@ -237,11 +237,26 @@ fn schema_connect(schema: &SanitizedSchema) -> String {
     format!("SET search_path TO \"{schema}\";")
 }
 
-async fn maybe_create_schema(config: &PostgresConfig) -> Result<(), sqlx::Error> {
-    let pg_connect_option = config
+/// Parses the connection string of `config` and turns off the per-statement logging of `sqlx`.
+///
+/// With statement logging on, `sqlx` asks the `log` crate after every statement whether a
+/// `DEBUG` record of the target `sqlx::query` is enabled. If the `tracing` subscriber filters
+/// with a per-layer filter and that filter disables the record, the question leaves state
+/// behind that makes the layer skip the next event or span of the thread
+/// (<https://github.com/tokio-rs/tracing/issues/2519>): the first log line after a statement
+/// is lost. Without statement logging `sqlx` does not ask.
+///
+/// Statements slower than one second are still logged as a warning.
+fn connect_options(config: &PostgresConfig) -> Result<PgConnectOptions, sqlx::Error> {
+    Ok(config
         .connection_string
         .expose_secret()
-        .parse::<PgConnectOptions>()?;
+        .parse::<PgConnectOptions>()?
+        .log_statements(log::LevelFilter::Off))
+}
+
+async fn maybe_create_schema(config: &PostgresConfig) -> Result<(), sqlx::Error> {
+    let pg_connect_option = connect_options(config)?;
 
     let mut connection = PgConnection::connect_with(&pg_connect_option).await?;
     // SanitizedSchema permits only ASCII letters, digits, and underscores.
@@ -283,6 +298,12 @@ pub enum CreateSchema {
 ///
 /// All other errors (e.g. `Configuration`, `ColumnDecode`) fail immediately.
 ///
+/// The connections of the pool do not log the statements they execute: `sqlx` logs them at
+/// `DEBUG` by default, and with a per-layer `tracing` filter that disables those records the
+/// first event after every statement would be lost
+/// (<https://github.com/tokio-rs/tracing/issues/2519>). Statements slower than one second are
+/// still logged as a warning.
+///
 /// # Errors
 ///
 /// Returns [`sqlx::Error`] if pool creation fails after all retry attempts
@@ -295,6 +316,7 @@ pub async fn pg_pool_with_schema(
         maybe_create_schema(config).await?;
     }
     let schema_connect = schema_connect(&config.schema);
+    let connect_options = connect_options(config)?;
 
     let backoff_strategy = ConstantBuilder::new()
         .with_delay(config.retry_delay)
@@ -318,7 +340,7 @@ pub async fn pg_pool_with_schema(
     (|| {
         pg_pool_options
             .clone()
-            .connect(config.connection_string.expose_secret())
+            .connect_with(connect_options.clone())
     })
     .retry(backoff_strategy)
     .sleep(tokio::time::sleep)
