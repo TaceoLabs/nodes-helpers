@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+## [0.10.4](https://github.com/TaceoLabs/nodes-helpers/compare/v0.10.3...v0.10.4)
+
+### 🐛 Bug Fixes
+
+
+- *(postgres)* Turn off sqlx statement logging to keep tracing events - ([436e9dc](https://github.com/TaceoLabs/nodes-helpers/commit/436e9dcbacd83a22d9d212917ff9f7b69e88f4d6))
+
+### 🧪 Testing
+
+
+- *(web3)* Mock a target without code in the ERC-165 error tests - ([f48ec92](https://github.com/TaceoLabs/nodes-helpers/commit/f48ec9270afb8ec970cfa274fe769fdb4a6461ab))
+- Remove the statement logging regression test - ([db162d7](https://github.com/TaceoLabs/nodes-helpers/commit/db162d7825a325a800be93550355bcc44a10c647))
+
+
 ## [0.10.3](https://github.com/TaceoLabs/nodes-helpers/compare/v0.10.2...v0.10.3)
 
 ### ⛰️ Features
