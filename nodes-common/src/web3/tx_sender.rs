@@ -25,7 +25,7 @@ pub struct TxSenderConfig {
     ///
     /// Defaults to **30 seconds**.
     #[serde(default = "TxSenderConfig::default_send_timeout")]
-    #[serde(with = "humantime_serde")]
+    #[serde(with = "jiff::fmt::serde::unsigned_duration::friendly::compact::required")]
     pub send_timeout: Duration,
 
     /// Maximum number of transactions that can be queued for broadcast at
