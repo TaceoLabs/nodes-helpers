@@ -53,6 +53,8 @@ pub use git_version;
 
 #[cfg(feature = "api")]
 pub mod api;
+#[cfg(any(feature = "postgres", feature = "web3"))]
+mod duration_serde;
 #[cfg(feature = "middleware")]
 pub mod middleware;
 #[cfg(feature = "postgres")]

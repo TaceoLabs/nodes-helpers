@@ -25,7 +25,7 @@ pub struct TxSenderConfig {
     ///
     /// Defaults to **30 seconds**.
     #[serde(default = "TxSenderConfig::default_send_timeout")]
-    #[serde(with = "humantime_serde")]
+    #[serde(deserialize_with = "crate::duration_serde::deserialize")]
     pub send_timeout: Duration,
 
     /// Maximum number of transactions that can be queued for broadcast at

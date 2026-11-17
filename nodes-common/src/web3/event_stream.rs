@@ -230,15 +230,15 @@ pub struct EventStreamConfig {
     pub chunk_size: NonZeroUsize,
     /// See [`EventStreamBuilder::new_head_timeout`].
     #[serde(default = "EventStreamConfig::default_new_head_timeout")]
-    #[serde(with = "humantime_serde")]
+    #[serde(deserialize_with = "crate::duration_serde::deserialize")]
     pub new_head_timeout: Duration,
     /// See [`EventStreamBuilder::sync_timeout`].
     #[serde(default = "EventStreamConfig::default_sync_timeout")]
-    #[serde(with = "humantime_serde")]
+    #[serde(deserialize_with = "crate::duration_serde::deserialize")]
     pub sync_timeout: Duration,
     /// See [`EventStreamBuilder::sync_poll_interval`].
     #[serde(default = "EventStreamConfig::default_sync_poll_interval")]
-    #[serde(with = "humantime_serde")]
+    #[serde(deserialize_with = "crate::duration_serde::deserialize")]
     pub sync_poll_interval: Duration,
     /// See [`EventStreamBuilder::confirmations_after_sync_block`].
     #[serde(default = "EventStreamConfig::default_confirmations_after_sync_block")]

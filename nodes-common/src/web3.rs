@@ -102,7 +102,7 @@ pub struct HttpRpcProviderConfig {
     /// Uses alloy's default setting if omitted. For `dev` environment 250ms
     /// and for all other environments 7s.
     #[serde(default)]
-    #[serde(with = "humantime_serde")]
+    #[serde(deserialize_with = "crate::duration_serde::option::deserialize")]
     pub confirmations_poll_interval: Option<Duration>,
     /// Retry configuration applied to RPC requests.
     #[serde(default)]
@@ -120,14 +120,14 @@ pub struct RetryPolicyConfig {
     ///
     /// Defaults to **1 second**.
     #[serde(default = "RetryPolicyConfig::default_min_delay")]
-    #[serde(with = "humantime_serde")]
+    #[serde(deserialize_with = "crate::duration_serde::deserialize")]
     pub min_delay: Duration,
 
     /// Maximum delay between retries.
     ///
     /// Defaults to **8 seconds**.
     #[serde(default = "RetryPolicyConfig::default_max_delay")]
-    #[serde(with = "humantime_serde")]
+    #[serde(deserialize_with = "crate::duration_serde::deserialize")]
     pub max_delay: Duration,
 
     /// Maximum number of retry attempts.

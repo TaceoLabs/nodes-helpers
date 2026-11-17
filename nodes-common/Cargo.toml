@@ -42,7 +42,6 @@ eyre = { workspace = true, optional = true }
 futures = { workspace = true, optional = true }
 git-version = { workspace = true }
 headers = { workspace = true, optional = true }
-humantime-serde = { workspace = true, optional = true }
 reqwest = { workspace = true, features = ["default-tls", "json"], optional = true }
 reserve-port = { workspace = true, optional = true }
 secrecy = { workspace = true, features = ["serde"], optional = true }
@@ -86,7 +85,6 @@ middleware = []
 postgres = [
   "dep:ark-serialize",
   "dep:backon",
-  "dep:humantime-serde",
   "dep:secrecy",
   "dep:serde",
   "dep:sqlx",
@@ -119,7 +117,6 @@ web3 = [
   "dep:alloy",
   "dep:backon",
   "dep:futures",
-  "dep:humantime-serde",
   "dep:serde",
   "dep:tower"
 ]
