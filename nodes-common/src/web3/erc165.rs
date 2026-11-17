@@ -324,6 +324,13 @@ mod tests {
         Bytes::from((U256::ZERO, return_data).abi_encode_params())
     }
 
+    /// The Multicall3 response for `calls` calls to an address without code: every call
+    /// succeeds with empty return data.
+    #[cfg(feature = "web3-asserter")]
+    fn aggregate_response_without_code(calls: usize) -> Bytes {
+        Bytes::from((U256::ZERO, vec![Bytes::new(); calls]).abi_encode_params())
+    }
+
     #[cfg(feature = "web3-asserter")]
     fn provider_with_response(response: &Bytes) -> (HttpRpcProvider, Asserter) {
         let asserter = Asserter::new();
@@ -363,7 +370,7 @@ mod tests {
     #[cfg(feature = "web3-asserter")]
     #[tokio::test]
     async fn ensure_erc165_conform_maps_call_errors() {
-        let (provider, asserter) = provider_with_response(&Bytes::new());
+        let (provider, asserter) = provider_with_response(&aggregate_response_without_code(2));
         let result = provider
             .ensure_erc165_conform(address!("0000000000000000000000000000000000000001"))
             .await;
@@ -418,7 +425,7 @@ mod tests {
     #[cfg(feature = "web3-asserter")]
     #[tokio::test]
     async fn erc165_supports_interface_maps_call_errors() {
-        let (provider, asserter) = provider_with_response(&Bytes::new());
+        let (provider, asserter) = provider_with_response(&aggregate_response_without_code(3));
         let result = provider
             .erc165_supports_interface(
                 address!("0000000000000000000000000000000000000001"),
