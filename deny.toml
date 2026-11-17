@@ -74,7 +74,6 @@ ignore = [
   { id = "RUSTSEC-2026-0387", reason = "crypto-bigint 0.5 timing issues; transitive via alloy -> k256/elliptic-curve 0.13, fix only in 0.7 which elliptic-curve 0.13 cannot use (2026-11-05)" },
   { id = "RUSTSEC-2026-0440", reason = "Unmaintained `astral-tokio-tar`; transitive via testcontainers (test-utils feature only), no upstream replacement yet (2026-11-05)" },
   { id = "RUSTSEC-2026-0441", reason = "Unmaintained `pin-utils`; transitive via aws-smithy-*, alloy-signer-aws 2.5 pins aws-smithy-types =1.6.1 which blocks the newer aws crates that drop it (2026-11-05)" },
-  { id = "RUSTSEC-2026-0542", reason = "Unmaintained `humantime` (wraps chrono); direct via humantime-serde for config durations, no replacement chosen yet (2026-11-17)" },
   { id = "RUSTSEC-2026-0543", reason = "Unmaintained `chrono`; transitive via axum-test -> expect-json and alloy-signer-gcp -> gcloud-sdk, no upstream release without it yet (2026-11-17)" },
 ]
 # If this is true, then cargo deny will use the git executable to fetch advisory database.

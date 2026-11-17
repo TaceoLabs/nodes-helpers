@@ -8,7 +8,7 @@
 //! The struct supports:
 //! - Required fields: `connection_string` and `schema`.
 //! - Optional fields with sensible defaults (see below).
-//! - Serde deserialization (with [`humantime_serde`] for durations).
+//! - Serde deserialization (with [`jiff`]'s friendly duration format for durations).
 //!
 //! # Defaults
 //!
@@ -158,13 +158,13 @@ pub struct PostgresConfig {
     /// becomes available within this duration, the acquire operation fails
     /// with [`sqlx::Error::PoolTimedOut`].
     #[serde(default = "PostgresConfig::default_acquire_timeout")]
-    #[serde(with = "humantime_serde")]
+    #[serde(with = "jiff::fmt::serde::unsigned_duration::friendly::compact::required")]
     pub acquire_timeout: Duration,
     /// Threshold for `sqlx` warning logs.
     ///
     /// If acquiring a new connection from pool exceeds this threshold, `sqlx` will log a warning.
     #[serde(default = "PostgresConfig::default_slow_acquire_threshold")]
-    #[serde(with = "humantime_serde")]
+    #[serde(with = "jiff::fmt::serde::unsigned_duration::friendly::compact::required")]
     pub slow_acquire_threshold: Duration,
     /// Maximum number of attempts when pool creation fails with a
     /// transient error (see [module-level docs](self#retry-behaviour) for
@@ -175,7 +175,7 @@ pub struct PostgresConfig {
     /// Constant delay between retry attempts during pool creation (see
     /// [retry behaviour](self#retry-behaviour)).
     #[serde(default = "PostgresConfig::default_retry_delay")]
-    #[serde(with = "humantime_serde")]
+    #[serde(with = "jiff::fmt::serde::unsigned_duration::friendly::compact::required")]
     pub retry_delay: Duration,
 }
 
